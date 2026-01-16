@@ -823,7 +823,6 @@
 //   );
 // }
 
-
 // src/screens/GalleryScreen.tsx
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -916,6 +915,10 @@ export default function GalleryScreen() {
   const [newFolderName, setNewFolderName] = useState("");
 
   const [showMoveSelected, setShowMoveSelected] = useState(false);
+
+  // ✅ iOS: after picking photos, UI can flash blank for 1 frame while IndexedDB finishes write.
+  // Keep a tiny importing state to avoid "purple empty screen" feeling.
+  const [isImporting, setIsImporting] = useState(false);
 
   const getUrl = usePhotoUrls(items);
 
@@ -1013,16 +1016,32 @@ export default function GalleryScreen() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const fav = tab === "FAVORITES";
-    await addPhotos(files, currentFolder, fav);
-    e.target.value = "";
-    await refresh();
+    setIsImporting(true);
 
-    // try sync if online
-    if (navigator.onLine) {
-      try {
-        await syncNow();
-      } catch {}
+    try {
+      const fav = tab === "FAVORITES";
+      await addPhotos(files, currentFolder, fav);
+
+      // IMPORTANT: clear input immediately (iOS sometimes reuses the same selection)
+      e.target.value = "";
+
+      // ✅ refresh now
+      await refresh();
+
+      // ✅ and once more slightly позже (iOS/IndexedDB write can "finish" right after first read)
+      setTimeout(() => {
+        refresh().catch(() => {});
+      }, 120);
+
+      // try sync if online
+      if (navigator.onLine) {
+        try {
+          await syncNow();
+        } catch {}
+      }
+    } finally {
+      // tiny delay so overlay doesn't flicker
+      setTimeout(() => setIsImporting(false), 150);
     }
   }
 
@@ -1346,6 +1365,23 @@ export default function GalleryScreen() {
           </div>
         )}
 
+        {/* ✅ iOS import overlay (prevents "empty purple screen" feeling) */}
+        {isImporting ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "rgba(6, 0, 22, 0.35)",
+              zIndex: 50,
+              pointerEvents: "none",
+            }}
+          >
+            <div style={{ color: "#FFE7FF", fontSize: 14, opacity: 0.9 }}>Добавляю фотки...</div>
+          </div>
+        ) : null}
+
         {/* Fullscreen overlay */}
         {selectedIndex !== null && tab !== "SETTINGS" ? (
           <FullscreenOverlay
@@ -1648,4 +1684,3 @@ function MoveSelectedDialog(props: {
     </div>
   );
 }
-
