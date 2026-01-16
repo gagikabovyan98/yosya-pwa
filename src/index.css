@@ -559,27 +559,69 @@ body {
 .fsArrowL {
   position: absolute;
   top: 50%;
-  left: 12px;
   transform: translateY(-50%);
+
   font-size: 38px;
   color: #ffe7ff;
+
   cursor: pointer;
   user-select: none;
   z-index: 3;
   pointer-events: auto;
+
+  /* ✅ reset iOS button look */
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-family: "Pixel", monospace;
+  -webkit-appearance: none;
+  appearance: none;
+
+  /* ✅ bigger tap area WITHOUT grey box */
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+
+  /* optional: small glow like other UI */
+  text-shadow: 0 0 6px rgba(255, 77, 225, 0.55);
+  left: 12px;
 }
 
 .fsArrowR {
   position: absolute;
   top: 50%;
-  right: 12px;
   transform: translateY(-50%);
+
   font-size: 38px;
   color: #ffe7ff;
+
   cursor: pointer;
   user-select: none;
   z-index: 3;
   pointer-events: auto;
+
+  /* ✅ reset iOS button look */
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-family: "Pixel", monospace;
+  -webkit-appearance: none;
+  appearance: none;
+
+  /* ✅ bigger tap area WITHOUT grey box */
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+
+  /* optional: small glow like other UI */
+  text-shadow: 0 0 6px rgba(255, 77, 225, 0.55);
+  right: 12px;
 }
 
 .fsFolderPill {
