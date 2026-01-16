@@ -12,66 +12,64 @@ import "dotenv/config";
 const app = Fastify({ logger: true });
 
 /**
- * NOTE:
- * - Frontend calls API via same-origin "/api/..." (nginx proxy) => CORS is not required for that.
- * - Upload itself is a PUT to MinIO via presigned URL => CORS must be configured in MinIO (not here).
- * We keep CORS enabled for dev convenience.
+ * CORS:
+ * - В проде лучше same-origin, потому что фронт и api у тебя на одном домене через nginx (/api/*).
+ * - Но в dev удобно localhost:5173.
  */
 await app.register(cors, {
-  origin: [
-    "http://localhost:5173",
-    // "https://yourdomain.com"
-  ],
+  origin: (origin, cb) => {
+    // allow server-to-server / curl (no Origin)
+    if (!origin) return cb(null, true);
+
+    const allowed = new Set([
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      // добавишь позже домен:
+      // "https://yourdomain.com",
+    ]);
+
+    cb(null, allowed.has(origin));
+  },
   methods: ["GET", "POST", "OPTIONS"],
 });
 
 // ===== env =====
-// INTERNAL: server -> MinIO (usually localhost)
-const S3_ENDPOINT_INTERNAL =
-  process.env.S3_ENDPOINT_INTERNAL || process.env.S3_ENDPOINT || "http://127.0.0.1:9100";
+const S3_ENDPOINT_INTERNAL = process.env.S3_ENDPOINT_INTERNAL || "http://127.0.0.1:9100";
+const S3_ENDPOINT_PUBLIC = process.env.S3_ENDPOINT_PUBLIC || S3_ENDPOINT_INTERNAL;
 
-// PUBLIC: what client must use in presigned URL (IP or domain)
-const S3_ENDPOINT_PUBLIC =
-  process.env.S3_ENDPOINT_PUBLIC ||
-  process.env.S3_PUBLIC_ENDPOINT ||
-  process.env.S3_PUBLIC_ENDPOINT_URL ||
-  "";
-
-// other
 const S3_REGION = process.env.S3_REGION || "us-east-1";
 const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY || "minioadmin";
 const S3_SECRET_KEY = process.env.S3_SECRET_KEY || "supersecretpassword";
 const S3_BUCKET = process.env.S3_BUCKET || "yosya";
 const PUBLIC_BASE = process.env.PUBLIC_BASE || "photos"; // prefix in bucket
 
-function rewriteSignedUrlToPublic(url: string) {
-  if (!S3_ENDPOINT_PUBLIC) return url;
-
-  try {
-    const u = new URL(url);
-    const pub = new URL(S3_ENDPOINT_PUBLIC);
-
-    u.protocol = pub.protocol;
-    u.host = pub.host; // includes port if any
-
-    return u.toString();
-  } catch {
-    return url;
-  }
-}
-
-const s3 = new S3Client({
+/**
+ * IMPORTANT:
+ * Presigned URL MUST be signed with the SAME endpoint host that will be used by the client.
+ * So we sign with S3_ENDPOINT_PUBLIC.
+ */
+const s3Signer = new S3Client({
   region: S3_REGION,
-  endpoint: S3_ENDPOINT_INTERNAL,
-  forcePathStyle: true, // important for MinIO
+  endpoint: S3_ENDPOINT_PUBLIC,
+  forcePathStyle: true,
   credentials: {
     accessKeyId: S3_ACCESS_KEY,
     secretAccessKey: S3_SECRET_KEY,
   },
 });
 
-// ===== very simple metadata store (MVP) =====
-// stores: folder, favorite, deleted, createdAt, originalName
+// (optional) if later you need server->minio direct operations, you can use internal client
+const s3Internal = new S3Client({
+  region: S3_REGION,
+  endpoint: S3_ENDPOINT_INTERNAL,
+  forcePathStyle: true,
+  credentials: {
+    accessKeyId: S3_ACCESS_KEY,
+    secretAccessKey: S3_SECRET_KEY,
+  },
+});
+
+// ===== simple metadata store (MVP) =====
 const dataDir = path.resolve(process.cwd(), "data");
 const metaPath = path.join(dataDir, "meta.json");
 
@@ -106,11 +104,10 @@ function saveMeta(m: Meta) {
 
 app.get("/api/health", async () => ({ ok: true }));
 
-// 1) create upload url
 app.post("/api/upload-url", async (req, reply) => {
   const body = z
     .object({
-      id: z.string(), // uuid from client
+      id: z.string(),
       contentType: z.string().default("image/jpeg"),
       originalName: z.string().default("photo.jpg"),
       folder: z.string().nullable().default(null),
@@ -127,9 +124,8 @@ app.post("/api/upload-url", async (req, reply) => {
     ContentType: body.contentType,
   });
 
-  // Sign using INTERNAL endpoint, then rewrite to PUBLIC so mobile/browser can reach it
-  const urlInternal = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 });
-  const url = rewriteSignedUrlToPublic(urlInternal);
+  // SIGN WITH PUBLIC ENDPOINT (critical)
+  const url = await getSignedUrl(s3Signer, cmd, { expiresIn: 60 * 10 });
 
   const meta = loadMeta();
   meta[body.id] = {
@@ -146,7 +142,6 @@ app.post("/api/upload-url", async (req, reply) => {
   return reply.send({ url, objectKey });
 });
 
-// 2) get download url
 app.post("/api/download-url", async (req, reply) => {
   const body = z.object({ id: z.string() }).parse(req.body);
 
@@ -159,13 +154,11 @@ app.post("/api/download-url", async (req, reply) => {
     Key: rec.key,
   });
 
-  const urlInternal = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 });
-  const url = rewriteSignedUrlToPublic(urlInternal);
-
+  // SIGN WITH PUBLIC ENDPOINT (so phone can use it)
+  const url = await getSignedUrl(s3Signer, cmd, { expiresIn: 60 * 10 });
   return reply.send({ url });
 });
 
-// 3) soft delete (tombstone)
 app.post("/api/delete", async (req, reply) => {
   const body = z.object({ id: z.string() }).parse(req.body);
 
@@ -179,7 +172,6 @@ app.post("/api/delete", async (req, reply) => {
   return reply.send({ ok: true });
 });
 
-// 4) update flags (folder/favorite)
 app.post("/api/update", async (req, reply) => {
   const body = z
     .object({
@@ -200,7 +192,6 @@ app.post("/api/update", async (req, reply) => {
   return reply.send({ ok: true });
 });
 
-// 5) sync list
 app.get("/api/sync", async () => {
   const meta = loadMeta();
   const list = Object.values(meta).sort((a, b) => b.createdAt - a.createdAt);
