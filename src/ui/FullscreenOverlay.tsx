@@ -62,32 +62,43 @@ export default function FullscreenOverlay(props: {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div className="fsClickClose" onClick={onClose} />
+      {/* NOTE: fsClickClose перенесли В КОНЕЦ, чтобы он был "под" кнопками по z-index */}
 
-      <div className="fsImageBoxWrap">
+      <div className="fsImageBoxWrap" onClick={(e) => e.stopPropagation()}>
         <div className="fsCard" onClick={(e) => e.stopPropagation()}>
           {curUrl ? <img className="fsImg" src={curUrl} alt={cur.name} draggable={false} /> : null}
         </div>
       </div>
 
       {/* heart */}
-      <div
+      <button
+        type="button"
         className="fsHeart"
-        style={{ color: cur.isFavorite ? "#FF5C8A" : "#FFE7FF", transform: `scale(${cur.isFavorite ? 1.25 : 1})`, transition: "transform 180ms ease" }}
+        aria-label="favorite"
+        style={{
+          color: cur.isFavorite ? "#FF5C8A" : "#FFE7FF",
+          transform: `scale(${cur.isFavorite ? 1.25 : 1})`,
+          transition: "transform 180ms ease",
+        }}
         onClick={(e) => {
           e.stopPropagation();
           onToggleFavorite();
         }}
       >
         {cur.isFavorite ? "♥" : "♡"}
-      </div>
+      </button>
 
       {/* arrows */}
-      <div className="fsArrowL" onClick={(e) => { e.stopPropagation(); onPrev(); }}>‹</div>
-      <div className="fsArrowR" onClick={(e) => { e.stopPropagation(); onNext(); }}>›</div>
+      <button type="button" className="fsArrowL" aria-label="prev" onClick={(e) => { e.stopPropagation(); onPrev(); }}>
+        ‹
+      </button>
+      <button type="button" className="fsArrowR" aria-label="next" onClick={(e) => { e.stopPropagation(); onNext(); }}>
+        ›
+      </button>
 
       {/* folder pill */}
-      <div
+      <button
+        type="button"
         className="fsFolderPill"
         onClick={(e) => {
           e.stopPropagation();
@@ -96,7 +107,7 @@ export default function FullscreenOverlay(props: {
         }}
       >
         <div className="fsFolderText">Папка: {cur.folder ?? "Без папки"}</div>
-      </div>
+      </button>
 
       {/* actions */}
       <div className="fsActions">
@@ -109,7 +120,15 @@ export default function FullscreenOverlay(props: {
       </div>
 
       {/* close */}
-      <div className="fsClose" onClick={(e) => { e.stopPropagation(); onClose(); }}>✕</div>
+      <button type="button" className="fsClose" aria-label="close" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+        ✕
+      </button>
+
+      {/* ✅ клик по фону — закрыть (но слой теперь ниже кнопок) */}
+      <div
+        className="fsClickClose"
+        onClick={onClose}
+      />
 
       {/* folder dialog */}
       {showFolderDialog ? (
