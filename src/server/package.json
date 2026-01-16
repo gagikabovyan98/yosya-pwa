@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch index.ts",
-    "start": "tsx index.ts"
+    "start": "npx --no-install tsx index.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
