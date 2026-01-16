@@ -5,7 +5,6 @@ import ParticleField from "../ui/ParticleField";
 import FullscreenOverlay from "../ui/FullscreenOverlay";
 import {
   addPhotos,
-  blobToUrl,
   softDeletePhoto,
   ensureDefaults,
   getBackgroundStyle,
@@ -21,8 +20,48 @@ import {
 } from "../storage/db";
 import { syncNow } from "../api/sync";
 
-
 type GalleryTab = "ALL" | "FAVORITES" | "SETTINGS";
+
+/**
+ * Stable ObjectURL cache per photo id.
+ * Fixes iOS "question mark" placeholders caused by revoking URLs on every refresh.
+ */
+function usePhotoUrls(items: PhotoRecord[]) {
+  const mapRef = useRef(new Map<string, { url: string; blob: Blob }>());
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    // add/update urls
+    for (const it of items) {
+      const cur = map.get(it.id);
+      if (!cur) {
+        map.set(it.id, { url: URL.createObjectURL(it.blob), blob: it.blob });
+      } else if (cur.blob !== it.blob) {
+        URL.revokeObjectURL(cur.url);
+        map.set(it.id, { url: URL.createObjectURL(it.blob), blob: it.blob });
+      }
+    }
+
+    // revoke removed
+    const ids = new Set(items.map((x) => x.id));
+    for (const [id, cur] of map.entries()) {
+      if (!ids.has(id)) {
+        URL.revokeObjectURL(cur.url);
+        map.delete(id);
+      }
+    }
+  }, [items]);
+
+  useEffect(() => {
+    return () => {
+      for (const cur of mapRef.current.values()) URL.revokeObjectURL(cur.url);
+      mapRef.current.clear();
+    };
+  }, []);
+
+  return (id: string) => mapRef.current.get(id)?.url || "";
+}
 
 export default function GalleryScreen() {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -44,6 +83,8 @@ export default function GalleryScreen() {
   const [newFolderName, setNewFolderName] = useState("");
 
   const [showMoveSelected, setShowMoveSelected] = useState(false);
+
+  const getUrl = usePhotoUrls(items);
 
   async function refresh() {
     const rows = await listPhotos();
@@ -92,18 +133,6 @@ export default function GalleryScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-
-  const urls = useMemo(() => {
-    return items.map((x) => ({ id: x.id, url: blobToUrl(x.blob) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
-
-  useEffect(() => {
-    return () => {
-      for (const u of urls) URL.revokeObjectURL(u.url);
-    };
-  }, [urls]);
 
   const favoritesCount = useMemo(() => items.filter((x) => x.isFavorite).length, [items]);
   const totalCount = items.length;
@@ -158,10 +187,10 @@ export default function GalleryScreen() {
 
     // try sync if online
     if (navigator.onLine) {
-      try { await syncNow(); } catch {}
+      try {
+        await syncNow();
+      } catch {}
     }
-
-
   }
 
   async function onToggleFavorite(id: string) {
@@ -170,7 +199,9 @@ export default function GalleryScreen() {
 
     // try sync if online
     if (navigator.onLine) {
-      try { await syncNow(); } catch {}
+      try {
+        await syncNow();
+      } catch {}
     }
 
     // если мы в избранных и сняли лайк — закрыть fullscreen как в android
@@ -180,18 +211,19 @@ export default function GalleryScreen() {
     }
   }
 
-
   async function onDelete(id: string) {
     await softDeletePhoto(id);
     await refresh();
     setSelectedIndex(null);
     setSelectedIds((prev) => prev.filter((x) => x !== id));
+
     // try sync if online
     if (navigator.onLine) {
-      try { await syncNow(); } catch {}
+      try {
+        await syncNow();
+      } catch {}
     }
   }
-
 
   async function onChangeFolderOne(id: string, folderValue: string | null) {
     await setPhotoFolder(id, folderValue);
@@ -202,10 +234,11 @@ export default function GalleryScreen() {
 
     // try sync if online
     if (navigator.onLine) {
-      try { await syncNow(); } catch {}
+      try {
+        await syncNow();
+      } catch {}
     }
   }
-
 
   async function onChangeFolderMany(ids: string[], folderValue: string | null) {
     for (const id of ids) {
@@ -219,10 +252,11 @@ export default function GalleryScreen() {
 
     // one sync after bulk changes
     if (navigator.onLine) {
-      try { await syncNow(); } catch {}
+      try {
+        await syncNow();
+      } catch {}
     }
   }
-
 
   async function createFolderAndSelect(name: string) {
     const trimmed = name.trim();
@@ -261,7 +295,9 @@ export default function GalleryScreen() {
     const list = items.filter((x) => ids.includes(x.id));
     if (!list.length) return;
 
-    const files = list.map((rec) => new File([rec.blob], rec.name || "photo.jpg", { type: rec.blob.type || "image/jpeg" }));
+    const files = list.map(
+      (rec) => new File([rec.blob], rec.name || "photo.jpg", { type: rec.blob.type || "image/jpeg" })
+    );
     const nav: any = navigator;
 
     if (nav.share && nav.canShare && nav.canShare({ files })) {
@@ -367,9 +403,7 @@ export default function GalleryScreen() {
               <div className="grid">
                 <div className="gridInner">
                   {photoList.map((p, idx) => {
-                    const urlObj = urls.find((x) => x.id === p.id);
-                    const u = urlObj?.url;
-
+                    const u = getUrl(p.id);
                     const selected = isSelected(p.id);
 
                     return (
@@ -394,10 +428,7 @@ export default function GalleryScreen() {
                               onToggleFavorite(p.id);
                             }}
                           >
-                            <span
-                              className="heartText"
-                              style={{ color: p.isFavorite ? "#FF5C8A" : "#FFE7FF" }}
-                            >
+                            <span className="heartText" style={{ color: p.isFavorite ? "#FF5C8A" : "#FFE7FF" }}>
                               {p.isFavorite ? "♥" : "♡"}
                             </span>
                           </div>
@@ -430,7 +461,14 @@ export default function GalleryScreen() {
             <button className="fab" onClick={() => inputRef.current?.click()}>
               +
             </button>
-            <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onPickFiles} />
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={onPickFiles}
+            />
           </>
         ) : (
           // SETTINGS
@@ -478,7 +516,7 @@ export default function GalleryScreen() {
         {selectedIndex !== null && tab !== "SETTINGS" ? (
           <FullscreenOverlay
             items={photoList}
-            urls={photoList.map((p) => urls.find((x) => x.id === p.id)?.url || "")}
+            urls={photoList.map((p) => getUrl(p.id))}
             index={selectedIndex}
             onClose={() => setSelectedIndex(null)}
             onPrev={() => {
@@ -556,9 +594,7 @@ export default function GalleryScreen() {
               }}
             >
               <div className="bottomIcon">{tab === "FAVORITES" ? "♥" : "♡"}</div>
-              <div className="bottomLabel">
-                {favoritesCount > 0 ? `Избранные (${favoritesCount})` : "Избранные"}
-              </div>
+              <div className="bottomLabel">{favoritesCount > 0 ? `Избранные (${favoritesCount})` : "Избранные"}</div>
             </button>
 
             <button
@@ -686,7 +722,12 @@ function CreateFolderDialog(props: {
     <div className="dialogBack" onClick={onCancel}>
       <div className="dialogCard" onClick={(e) => e.stopPropagation()}>
         <div className="dialogTitle">Новая папка</div>
-        <input className="dialogInput" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Имя папки" />
+        <input
+          className="dialogInput"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Имя папки"
+        />
         <div className="dialogBtns">
           <button className="dialogBtn" onClick={onCancel}>
             Отмена
@@ -740,7 +781,12 @@ function MoveSelectedDialog(props: {
           </button>
         ) : (
           <>
-            <input className="dialogInput" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder="Имя новой папки" />
+            <input
+              className="dialogInput"
+              value={newFolder}
+              onChange={(e) => setNewFolder(e.target.value)}
+              placeholder="Имя новой папки"
+            />
             <div className="dialogBtns">
               <button className="dialogBtn" onClick={onClose}>
                 Отмена
