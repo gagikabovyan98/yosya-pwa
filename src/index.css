@@ -1,7 +1,5 @@
 /* src/index.css */
 
-/* src/index.css */
-
 @font-face {
   font-family: "Pixel";
   src: url("./assets/fonts/press_start_2p.ttf") format("truetype");
@@ -13,8 +11,8 @@
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-left: env(safe-area-inset-left);
+  --safe-right: env(safe-area-inset-right);
 }
 
 html,
@@ -29,6 +27,10 @@ body {
   padding: 0;
   background: #060016;
   overflow: hidden;
+
+  /* IMPORTANT: prevent iOS “rubber-band” scroll on the whole page */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
 
   /* Make pixel font default everywhere */
   font-family: "Pixel", monospace;
@@ -58,6 +60,10 @@ body {
   padding-right: var(--safe-right);
 
   overflow: hidden;
+
+  /* IMPORTANT: prevent overscroll “leaking” outside inner scroll areas */
+  overscroll-behavior: none;
+
   touch-action: pan-x pan-y;
   -webkit-tap-highlight-color: transparent;
 }
@@ -72,6 +78,9 @@ body {
   position: absolute;
   inset: 0;
   overflow: hidden;
+
+  /* IMPORTANT: prevent global rubber-band */
+  overscroll-behavior: none;
 }
 
 /* scaler gets translate+scale from App.tsx */
@@ -214,20 +223,24 @@ body {
   position: relative;
   overflow: hidden;
   background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
+
+  /* IMPORTANT: stop iOS rubber-band on the whole screen */
+  overscroll-behavior: none;
 }
 
 .galleryInner {
   width: 100%;
   height: 100%;
-  position: relative;
 
-  /* keep your safe area paddings */
-  padding: calc(10px + var(--safe-top)) 16px calc(64px + var(--safe-bottom)) 16px;
-
-  /* ✅ make layout fill properly */
+  /* IMPORTANT: switch to flex so grid can take remaining height properly */
   display: flex;
   flex-direction: column;
-  min-height: 0; /* IMPORTANT for children overflow */
+  min-height: 0;
+
+  position: relative;
+
+  /* keep your padding, but make it stable */
+  padding: calc(10px + var(--safe-top)) 16px calc(64px + var(--safe-bottom)) 16px;
 }
 
 .headerTitleRow {
@@ -328,16 +341,18 @@ body {
 .grid {
   margin-top: 8px;
 
-  /* ✅ take all remaining vertical space */
+  /* IMPORTANT: take remaining height, avoid “empty space” bug */
   flex: 1;
   min-height: 0;
 
   overflow: auto;
   padding-bottom: 80px;
 
-  -webkit-overflow-scrolling: touch; /* iOS smooth scroll */
+  /* IMPORTANT: keep scroll inside grid only (no page pull-down) */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
-
 
 .gridInner {
   display: grid;
@@ -437,6 +452,9 @@ body {
   padding: 10px 20px;
   display: grid;
   place-items: center;
+
+  /* optional: avoid weird clicks during overscroll */
+  overscroll-behavior: none;
 }
 
 .bottomBar {
@@ -488,16 +506,14 @@ body {
   inset: 0;
   z-index: 9999;
   background: rgba(5, 0, 18, 0.8);
+
+  overscroll-behavior: none;
 }
 
-/* IMPORTANT:
-   on iOS, a full-screen transparent layer can eat taps.
-   Keep the close-catcher behind all UI inside the same stacking context.
-*/
 .fsClickClose {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 10000;
 }
 
 .fsImageBoxWrap {
@@ -510,7 +526,7 @@ body {
   display: grid;
   place-items: center;
   padding: 0 18px;
-  z-index: 2;
+  z-index: 10001;
 }
 
 .fsCard {
@@ -521,7 +537,7 @@ body {
   border: 3px solid #ffe7ff;
   padding: 4px;
   overflow: hidden;
-  z-index: 2;
+  z-index: 10001;
 }
 
 .fsImg {
@@ -531,19 +547,15 @@ body {
   display: block;
 }
 
-/* NOTE: keep only safe-area based positioning (no duplicates) */
 .fsHeart {
   position: absolute;
   top: calc(12px + var(--safe-top));
   left: 16px;
-
   font-size: 26px;
   cursor: pointer;
   user-select: none;
-
-  z-index: 3;
+  z-index: 10002;
   pointer-events: auto;
-
   background: transparent;
   border: none;
   padding: 0;
@@ -553,15 +565,12 @@ body {
   position: absolute;
   top: calc(12px + var(--safe-top));
   right: 16px;
-
   font-size: 24px;
   color: #ffb3d9;
   cursor: pointer;
   user-select: none;
-
-  z-index: 3;
+  z-index: 10002;
   pointer-events: auto;
-
   background: transparent;
   border: none;
   padding: 0;
@@ -570,69 +579,27 @@ body {
 .fsArrowL {
   position: absolute;
   top: 50%;
+  left: 12px;
   transform: translateY(-50%);
-
   font-size: 38px;
   color: #ffe7ff;
-
   cursor: pointer;
   user-select: none;
-  z-index: 3;
+  z-index: 10002;
   pointer-events: auto;
-
-  /* ✅ reset iOS button look */
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  font-family: "Pixel", monospace;
-  -webkit-appearance: none;
-  appearance: none;
-
-  /* ✅ bigger tap area WITHOUT grey box */
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-
-  /* optional: small glow like other UI */
-  text-shadow: 0 0 6px rgba(255, 77, 225, 0.55);
-  left: 12px;
 }
 
 .fsArrowR {
   position: absolute;
   top: 50%;
+  right: 12px;
   transform: translateY(-50%);
-
   font-size: 38px;
   color: #ffe7ff;
-
   cursor: pointer;
   user-select: none;
-  z-index: 3;
+  z-index: 10002;
   pointer-events: auto;
-
-  /* ✅ reset iOS button look */
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  font-family: "Pixel", monospace;
-  -webkit-appearance: none;
-  appearance: none;
-
-  /* ✅ bigger tap area WITHOUT grey box */
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-
-  /* optional: small glow like other UI */
-  text-shadow: 0 0 6px rgba(255, 77, 225, 0.55);
-  right: 12px;
 }
 
 .fsFolderPill {
@@ -645,11 +612,8 @@ body {
   background: rgba(0, 0, 0, 0.2);
   padding: 6px 14px;
   cursor: pointer;
-
-  z-index: 3;
+  z-index: 10002;
   pointer-events: auto;
-
-  border: none; /* because it's a <button> now */
 }
 
 .fsFolderText {
@@ -664,8 +628,7 @@ body {
   bottom: 76px;
   display: flex;
   gap: 12px;
-
-  z-index: 3;
+  z-index: 10002;
   pointer-events: auto;
 }
 
@@ -696,6 +659,8 @@ body {
   display: grid;
   place-items: center;
   padding: 16px;
+
+  overscroll-behavior: none;
 }
 
 .dialogCard {
