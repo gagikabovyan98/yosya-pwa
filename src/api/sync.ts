@@ -9,12 +9,16 @@ import {
   type PhotoRecord,
 } from "../storage/db";
 
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE?.toString() ||
-  "http://localhost:8787"; // later: https://api.yourdomain.com
+/**
+ * API base:
+ * - default ""  => same-origin (recommended in prod behind nginx: /api/*)
+ * - can be set to full origin via VITE_API_BASE (e.g. "https://api.domain.com")
+ */
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE?.toString() ?? "").trim();
 
 function apiUrl(path: string) {
-  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}${p}` : p;
 }
 
 async function safeJson(res: Response) {
@@ -51,7 +55,7 @@ async function uploadBlobToSignedUrl(url: string, blob: Blob) {
   const res = await fetch(url, {
     method: "PUT",
     headers: {
-      // some S3 setups like explicit content-type
+      // many S3 setups require explicit content-type
       "content-type": blob.type || "application/octet-stream",
     },
     body: blob,
@@ -107,8 +111,7 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
       try {
         await deleteRemote(p.id);
         await markSynced(p.id);
-        // optional cleanup: remove tombstone completely (comment if you want keep it)
-        await hardDeletePhoto(p.id);
+        await hardDeletePhoto(p.id); // optional cleanup
         deleted += 1;
       } catch {
         // keep pending
@@ -116,51 +119,48 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
     }
 
     // 2) uploads
-    // 2) uploads
     for (const p of uploads) {
-        try {
-            const fresh = await getPhoto(p.id);
-            if (!fresh) continue;
+      try {
+        const fresh = await getPhoto(p.id);
+        if (!fresh) continue;
 
-            // если уже удалено локально — аплоад не нужен, чистим хвост
-            if (fresh.deleted) {
-            await markSynced(fresh.id);
-            await hardDeletePhoto(fresh.id);
-            continue;
-            }
-
-            const url = await createUploadUrl(fresh);
-            await uploadBlobToSignedUrl(url, fresh.blob);
-
-            await markSynced(fresh.id);
-            uploaded += 1;
-        } catch {
-            // keep pending
+        // if already deleted locally — upload not needed, cleanup
+        if (fresh.deleted) {
+          await markSynced(fresh.id);
+          await hardDeletePhoto(fresh.id);
+          continue;
         }
-    }
 
+        const url = await createUploadUrl(fresh);
+        await uploadBlobToSignedUrl(url, fresh.blob);
+
+        await markSynced(fresh.id);
+        uploaded += 1;
+      } catch {
+        // keep pending
+      }
+    }
 
     // 3) updates (folder/favorite)
     for (const p of updates) {
-        try {
-            const fresh = await getPhoto(p.id);
-            if (!fresh) continue;
+      try {
+        const fresh = await getPhoto(p.id);
+        if (!fresh) continue;
 
-            // если уже удалено локально — апдейт не нужен, чистим хвост
-            if (fresh.deleted) {
-            await markSynced(fresh.id);
-            await hardDeletePhoto(fresh.id);
-            continue;
-            }
-
-            await updateFlags(fresh);
-            await markSynced(fresh.id);
-            updated += 1;
-        } catch {
-            // keep pending
+        // if already deleted locally — update not needed, cleanup
+        if (fresh.deleted) {
+          await markSynced(fresh.id);
+          await hardDeletePhoto(fresh.id);
+          continue;
         }
-    }
 
+        await updateFlags(fresh);
+        await markSynced(fresh.id);
+        updated += 1;
+      } catch {
+        // keep pending
+      }
+    }
 
     await setLastSyncAt(Date.now());
     return { ok: true, uploaded, updated, deleted };

@@ -3,19 +3,20 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { z } from "zod";
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "node:fs";
 import path from "node:path";
 import "dotenv/config";
 
-
 const app = Fastify({ logger: true });
 
+/**
+ * NOTE:
+ * - Frontend calls API via same-origin "/api/..." (nginx proxy) => CORS is not required for that.
+ * - Upload itself is a PUT to MinIO via presigned URL => CORS must be configured in MinIO (not here).
+ * We keep CORS enabled for dev convenience.
+ */
 await app.register(cors, {
   origin: [
     "http://localhost:5173",
@@ -25,17 +26,44 @@ await app.register(cors, {
 });
 
 // ===== env =====
-const S3_ENDPOINT = process.env.S3_ENDPOINT || "http://127.0.0.1:9000";
+// INTERNAL: server -> MinIO (usually localhost)
+const S3_ENDPOINT_INTERNAL =
+  process.env.S3_ENDPOINT_INTERNAL || process.env.S3_ENDPOINT || "http://127.0.0.1:9100";
+
+// PUBLIC: what client must use in presigned URL (IP or domain)
+const S3_ENDPOINT_PUBLIC =
+  process.env.S3_ENDPOINT_PUBLIC ||
+  process.env.S3_PUBLIC_ENDPOINT ||
+  process.env.S3_PUBLIC_ENDPOINT_URL ||
+  "";
+
+// other
 const S3_REGION = process.env.S3_REGION || "us-east-1";
 const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY || "minioadmin";
 const S3_SECRET_KEY = process.env.S3_SECRET_KEY || "supersecretpassword";
 const S3_BUCKET = process.env.S3_BUCKET || "yosya";
-const PUBLIC_BASE = process.env.PUBLIC_BASE || "yosya"; // prefix in bucket
+const PUBLIC_BASE = process.env.PUBLIC_BASE || "photos"; // prefix in bucket
+
+function rewriteSignedUrlToPublic(url: string) {
+  if (!S3_ENDPOINT_PUBLIC) return url;
+
+  try {
+    const u = new URL(url);
+    const pub = new URL(S3_ENDPOINT_PUBLIC);
+
+    u.protocol = pub.protocol;
+    u.host = pub.host; // includes port if any
+
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
 
 const s3 = new S3Client({
   region: S3_REGION,
-  endpoint: S3_ENDPOINT,
-  forcePathStyle: true, // важно для MinIO
+  endpoint: S3_ENDPOINT_INTERNAL,
+  forcePathStyle: true, // important for MinIO
   credentials: {
     accessKeyId: S3_ACCESS_KEY,
     secretAccessKey: S3_SECRET_KEY,
@@ -43,7 +71,7 @@ const s3 = new S3Client({
 });
 
 // ===== very simple metadata store (MVP) =====
-// хранит: folder, favorite, deleted, createdAt, originalName
+// stores: folder, favorite, deleted, createdAt, originalName
 const dataDir = path.resolve(process.cwd(), "data");
 const metaPath = path.join(dataDir, "meta.json");
 
@@ -68,6 +96,7 @@ function loadMeta(): Meta {
     return {};
   }
 }
+
 function saveMeta(m: Meta) {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   fs.writeFileSync(metaPath, JSON.stringify(m, null, 2), "utf8");
@@ -98,7 +127,9 @@ app.post("/api/upload-url", async (req, reply) => {
     ContentType: body.contentType,
   });
 
-  const url = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 });
+  // Sign using INTERNAL endpoint, then rewrite to PUBLIC so mobile/browser can reach it
+  const urlInternal = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 });
+  const url = rewriteSignedUrlToPublic(urlInternal);
 
   const meta = loadMeta();
   meta[body.id] = {
@@ -128,7 +159,9 @@ app.post("/api/download-url", async (req, reply) => {
     Key: rec.key,
   });
 
-  const url = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 });
+  const urlInternal = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 });
+  const url = rewriteSignedUrlToPublic(urlInternal);
+
   return reply.send({ url });
 });
 
