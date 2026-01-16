@@ -1,0 +1,647 @@
+/* src/index.css */
+
+@font-face {
+  font-family: "Pixel";
+  src: url("./assets/fonts/press_start_2p.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-left: env(safe-area-inset-left);
+  --safe-right: env(safe-area-inset-right);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #060016;
+  overflow: hidden;
+
+  /* Make pixel font default everywhere */
+  font-family: "Pixel", monospace;
+
+  /* reduce smoothing (macOS still may smooth a bit) */
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ===== App full screen wrapper ===== */
+
+.app {
+  position: fixed;
+  inset: 0;
+
+  width: 100vw;
+  height: 100dvh;
+
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+
+  overflow: hidden;
+  touch-action: pan-x pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== Core layout: FULLSCREEN viewport + transformed 360x800 stage ===== */
+
+/* IMPORTANT:
+   viewport must be fullscreen and NOT center-grid,
+   because App.tsx already computes exact offsets.
+*/
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* scaler gets translate+scale from App.tsx */
+.scaler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: top left;
+}
+
+/* fixed stage (all screens live inside this) */
+.stage {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ========================================================= */
+/* ===== Intro styles (Compose-like) ======================= */
+/* ========================================================= */
+
+.introRoot {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
+}
+
+.introCenter {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.kittyBox {
+  width: 220px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+}
+
+.kittyGif {
+  width: 180px;
+  height: 180px;
+  image-rendering: pixelated;
+}
+
+.introTitle {
+  margin-top: 20px;
+  padding: 0 16px;
+  color: #f4dfff;
+  text-align: center;
+
+  /* Android 26sp ~ 26px at base 360x800 */
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 400;
+}
+
+/* Bottom hint like Compose */
+.swipeHint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  pointer-events: none;
+  animation: hintFloat 1800ms cubic-bezier(0.4, 0.0, 0.2, 1) infinite alternate;
+}
+
+/* IMPORTANT:
+   neonArrow uses transform for width,
+   and hintSlide also uses transform.
+   To avoid transform clobbering each other, wrap arrow.
+*/
+.neonArrowWrap {
+  display: inline-block;
+  transform: translateX(0px) scaleX(1.35);
+  animation: hintSlide 1800ms cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
+}
+
+.neonArrow {
+  font-family: "Pixel", monospace;
+  font-size: 44px; /* ближе к Android 44sp */
+  font-weight: 700;
+  color: #ffe7ff;
+
+  text-shadow: 0 0 6px rgba(255, 77, 225, 0.9),
+    0 0 14px rgba(255, 77, 225, 0.55);
+}
+
+@keyframes hintSlide {
+  0% {
+    transform: translateX(0px) scaleX(1.35);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(-10px) scaleX(1.35);
+    opacity: 1;
+  }
+  70% {
+    transform: translateX(-40px) scaleX(1.35);
+    opacity: 1;
+  }
+  85% {
+    transform: translateX(-40px) scaleX(1.35);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(-40px) scaleX(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes hintFloat {
+  from {
+    transform: translateY(0px);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
+
+/* ========================================================= */
+/* ===== Gallery styles (Android 1:1-ish) ================== */
+/* ========================================================= */
+
+.galleryRoot {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
+}
+
+.galleryInner {
+  width: 100%;
+  height: 100%;
+  padding: 28px 16px 64px 16px; /* top=28, bottom reserved for bottom bar */
+  position: relative;
+}
+
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.headerTitle {
+  color: #ffe7ff;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.headerHeart {
+  color: #ff5c8a;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.headerSub {
+  margin-top: 4px;
+  color: #ffb3d9;
+  font-size: 12px;
+  text-align: center;
+}
+
+.topControlsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  gap: 8px;
+}
+
+.pill {
+  border-radius: 20px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffe7ff;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+}
+
+.pillSelected {
+  background: rgba(255, 142, 219, 0.33);
+  color: #ffffff;
+}
+
+.selectionHint {
+  margin-top: 6px;
+  color: #ffb3d9;
+  font-size: 11px;
+}
+
+.selectionBar {
+  margin-top: 6px;
+  border-radius: 16px;
+  background: rgba(179, 0, 93, 0.4);
+  padding: 6px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.selectionBarText {
+  color: #ffe7ff;
+  font-size: 12px;
+}
+
+.selectionActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.smallChip {
+  border-radius: 20px;
+  padding: 4px 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.smallChipBlue {
+  background: rgba(255, 142, 219, 0.2);
+  color: #ffffff;
+}
+
+.smallChipWhite {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffe7ff;
+}
+
+.grid {
+  margin-top: 8px;
+  height: calc(100% - 28px - 64px - 120px);
+  overflow: auto;
+  padding-bottom: 80px;
+}
+
+.gridInner {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.card {
+  padding: 6px;
+}
+
+.cardBox {
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+
+  background: linear-gradient(135deg, #2b163e, #1a0a2d);
+  border: 2px solid #ffe7ff;
+  cursor: pointer;
+  position: relative;
+  padding: 4px;
+}
+
+.cardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.heartBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+
+  background: rgba(0, 0, 0, 0.53);
+  border-radius: 999px;
+  padding: 2px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.heartText {
+  font-size: 16px;
+}
+
+.selectDot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+
+  background: rgba(0, 0, 0, 0.53);
+  cursor: pointer;
+  user-select: none;
+}
+
+.selectDotSelected {
+  background: #ff5c8a;
+}
+
+.selectionOverlay {
+  position: absolute;
+  inset: 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.fab {
+  position: absolute;
+  right: 20px;
+  bottom: 80px;
+
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+
+  background: #ff9edb;
+  color: #2a0735;
+  border: none;
+  cursor: pointer;
+
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
+
+.bottomBarWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 20px;
+  display: grid;
+  place-items: center;
+}
+
+.bottomBar {
+  width: 100%;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 20px;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bottomItem {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #ffe7ff;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  opacity: 0.6;
+  transform: scale(1);
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.bottomItemSelected {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.bottomIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bottomLabel {
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ========================================================= */
+/* ===== Fullscreen (Android overlay 1:1-ish) ============== */
+/* ========================================================= */
+
+.fsBack {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(5, 0, 18, 0.8);
+}
+
+.fsClickClose {
+  position: absolute;
+  inset: 0;
+}
+
+.fsImageBoxWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+
+  display: grid;
+  place-items: center;
+  padding: 0 18px;
+}
+
+.fsCard {
+  width: min(92vw, 360px);
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2b163e, #130826);
+  border: 3px solid #ffe7ff;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.fsImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fsHeart {
+  position: absolute;
+  top: 32px;
+  left: 24px;
+  font-size: 26px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fsClose {
+  position: absolute;
+  top: 32px;
+  right: 24px;
+  font-size: 24px;
+  color: #ffb3d9;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fsArrowL {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fsArrowR {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fsFolderPill {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 120px;
+
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.fsFolderText {
+  color: #ffe7ff;
+  font-size: 12px;
+}
+
+.fsActions {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 76px;
+  display: flex;
+  gap: 12px;
+}
+
+.fsBtn {
+  border-radius: 20px;
+  padding: 6px 14px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.fsBtnShare {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffe7ff;
+}
+
+.fsBtnDelete {
+  background: rgba(255, 107, 154, 0.2);
+  color: #ff6b9a;
+}
+
+/* simple dialog */
+.dialogBack {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.dialogCard {
+  width: min(92vw, 420px);
+  background: #3b0030;
+  border-radius: 16px;
+  padding: 14px;
+  color: #ffe7ff;
+}
+
+.dialogTitle {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.dialogInput {
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffe7ff;
+  outline: none;
+  font-family: "Pixel", monospace;
+  font-size: 12px;
+}
+
+.dialogBtns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dialogBtn {
+  border: none;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffe7ff;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+}

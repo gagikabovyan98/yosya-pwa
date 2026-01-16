@@ -1,0 +1,17 @@
+// src/main.tsx
+
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App.tsx";
+
+// Disable any existing Service Worker in dev to prevent cache mixing
+if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister());
+  });
+}
+
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("Root element #root not found");
+
+createRoot(rootEl).render(<App />);
