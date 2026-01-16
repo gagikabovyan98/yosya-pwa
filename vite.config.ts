@@ -11,22 +11,6 @@ export default defineConfig({
       registerType: "autoUpdate",
       injectRegister: "auto",
 
-      // чтобы iOS добавлял на экран нормально
-      manifest: {
-        name: "YosyaDrows",
-        short_name: "Yosya",
-        start_url: "/",
-        scope: "/",
-        display: "standalone",
-        background_color: "#060016",
-        theme_color: "#060016",
-        icons: [
-          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
-          { src: "/pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-        ],
-      },
-
       workbox: {
         // кешируем все сборочные файлы + public ассеты
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,ttf,gif,webp,jpg,jpeg}"],
