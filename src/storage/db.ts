@@ -464,7 +464,6 @@
 //   );
 // }
 
-
 // src/storage/db.ts
 
 export type BackgroundStyle = "PURPLE" | "PINK";
@@ -499,6 +498,9 @@ const DB_VERSION = 4; // ✅ bump: added deviceId + safer meta evolution
 
 const STORE_PHOTOS = "photos";
 const STORE_META = "meta";
+
+// fallback key for Safari/PWA when IDB is flaky
+const LS_DEVICE_ID_KEY = "yosya_device_id";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -841,16 +843,44 @@ export async function setLastSyncAt(ts: number): Promise<void> {
 }
 
 /**
- * ✅ Device ID: each device has its own namespace on the server.
- * Stored in IndexedDB meta (survives refresh; if user clears site data - it will be re-generated).
+ * ✅ Device ID: must NEVER be undefined.
+ * Safari/PWA can temporarily fail IndexedDB — so we fallback to localStorage.
  */
 export async function getDeviceId(): Promise<string> {
-  const row = await withStore<MetaRow | undefined>(STORE_META, "readonly", (s) => s.get("deviceId"));
-  const v = row?.value;
-  if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  // 0) localStorage fast path
+  try {
+    const ls = localStorage.getItem(LS_DEVICE_ID_KEY);
+    if (ls && ls.trim().length > 0) return ls.trim();
+  } catch {}
 
+  // 1) try IndexedDB
+  try {
+    const row = await withStore<MetaRow | undefined>(STORE_META, "readonly", (s) => s.get("deviceId"));
+    const v = row?.value;
+    if (typeof v === "string" && v.trim().length > 0) {
+      // mirror to localStorage (best-effort)
+      try {
+        localStorage.setItem(LS_DEVICE_ID_KEY, v.trim());
+      } catch {}
+      return v.trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2) generate new id (always)
   const id = genId();
-  await withStore(STORE_META, "readwrite", (s) => s.put({ key: "deviceId", value: id })).then(() => undefined);
+
+  // store to localStorage first
+  try {
+    localStorage.setItem(LS_DEVICE_ID_KEY, id);
+  } catch {}
+
+  // store to IndexedDB (best-effort)
+  try {
+    await withStore(STORE_META, "readwrite", (s) => s.put({ key: "deviceId", value: id })).then(() => undefined);
+  } catch {}
+
   return id;
 }
 
@@ -868,14 +898,12 @@ export type ServerMetaItem = {
 
 /**
  * Apply server tombstone: if server says deleted => ensure local deleted too.
- * We keep it as pending_delete or synced? Here: mark synced (because server already has tombstone).
  */
 export async function applyServerDeleted(id: string): Promise<void> {
   const rec = await getPhoto(id);
   if (!rec) return;
 
   if (rec.deleted) {
-    // already deleted locally -> just mark synced
     await markSynced(id);
     return;
   }
@@ -891,19 +919,11 @@ export async function applyServerDeleted(id: string): Promise<void> {
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
 }
 
-/**
- * Upsert server metadata into local record (without downloading blob).
- * Blob is handled separately via download-url.
- */
 export async function upsertLocalMetaFromServer(item: ServerMetaItem): Promise<void> {
   const rec = await getPhoto(item.id);
-
   if (!rec) return;
 
-  // if local has pending changes, do not overwrite local metadata
   if (rec.syncState.startsWith("pending_")) return;
-
-  // server wins if newer
   if (typeof item.updatedAt === "number" && item.updatedAt <= rec.updatedAt) return;
 
   rec.folder = item.folder ?? null;
@@ -922,13 +942,7 @@ export async function upsertLocalMetaFromServer(item: ServerMetaItem): Promise<v
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
 }
 
-/**
- * Insert new local record from server download blob.
- */
-export async function insertDownloadedPhoto(
-  item: ServerMetaItem,
-  blob: Blob
-): Promise<void> {
+export async function insertDownloadedPhoto(item: ServerMetaItem, blob: Blob): Promise<void> {
   const existing = await getPhoto(item.id);
   if (existing) return;
 
