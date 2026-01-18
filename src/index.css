@@ -516,6 +516,22 @@ body {
   z-index: 10000;
 }
 
+/* .fsImageBoxWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 10001;
+
+  display: block;
+
+  padding-left: 18px;
+  padding-right: 18px;
+
+  padding-top: calc(12px + var(--safe-top));
+  padding-bottom: calc(160px + var(--safe-bottom));
+
+  pointer-events: none; 
+} */
+
 .fsImageBoxWrap {
   position: absolute;
   inset: 0;
@@ -540,7 +556,8 @@ body {
    - tablets: grows up to ~560px
    - also limited by height so it doesn't collide with bottom actions
 */
-.fsCard {
+
+/* .fsCard {
   position: absolute;
 
   left: 50%;
@@ -549,7 +566,6 @@ body {
 
   width: clamp(320px, 60vw, 560px);
 
-  /* ограничение по высоте + не "улетает вверх" */
   max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
   aspect-ratio: 3 / 4;
 
@@ -560,7 +576,29 @@ body {
   overflow: hidden;
 
   z-index: 10001;
-  pointer-events: auto; /* кликается сама карточка */
+  pointer-events: auto; 
+} */
+
+.fsCard {
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  width: clamp(320px, 60vw, 560px);
+
+  max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
+  aspect-ratio: 3 / 4;
+
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2b163e, #130826);
+  border: 3px solid #ffe7ff;
+  padding: 4px;
+  overflow: hidden;
+
+  z-index: 10001;
+  pointer-events: auto; 
 }
 
 .fsImg {
