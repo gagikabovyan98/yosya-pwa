@@ -75,16 +75,23 @@ textarea {
   position: fixed;
   inset: 0;
   width: 100vw;
-  height: 100dvh;
-  padding: 0;
+
+  /* ВАЖНО: вместо 100dvh */
+  height: var(--app-height, 100vh);
+
   overflow: hidden;
   background: #060016;
 
-  overscroll-behavior: none;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 
-  /* ВАЖНО: не none, иначе iOS ломает scroll внутри grid */
+  overscroll-behavior: none;
   touch-action: pan-x pan-y;
+  -webkit-tap-highlight-color: transparent;
 }
+
 
 .viewport {
   position: absolute;
