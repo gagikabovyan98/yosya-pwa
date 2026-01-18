@@ -13,9 +13,6 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left);
   --safe-right: env(safe-area-inset-right);
-
-  /* ✅ нижняя панель fullscreen (папка + кнопки) */
-  --fs-dock-h: 112px;
 }
 
 html,
@@ -31,11 +28,14 @@ body {
   background: #060016;
   overflow: hidden;
 
+  /* IMPORTANT: prevent iOS “rubber-band” scroll on the whole page */
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
 
+  /* Make pixel font default everywhere */
   font-family: "Pixel", monospace;
 
+  /* reduce smoothing (macOS still may smooth a bit) */
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
@@ -60,19 +60,30 @@ body {
   padding-right: var(--safe-right);
 
   overflow: hidden;
+
+  /* IMPORTANT: prevent overscroll “leaking” outside inner scroll areas */
   overscroll-behavior: none;
 
   touch-action: pan-x pan-y;
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ===== Core layout: FULLSCREEN viewport + transformed 360x800 stage ===== */
+
+/* IMPORTANT:
+   viewport must be fullscreen and NOT center-grid,
+   because App.tsx already computes exact offsets.
+*/
 .viewport {
   position: absolute;
   inset: 0;
   overflow: hidden;
+
+  /* IMPORTANT: prevent global rubber-band */
   overscroll-behavior: none;
 }
 
+/* scaler gets translate+scale from App.tsx */
 .scaler {
   position: absolute;
   left: 0;
@@ -80,6 +91,7 @@ body {
   transform-origin: top left;
 }
 
+/* fixed stage (all screens live inside this) */
 .stage {
   width: 100%;
   height: 100%;
@@ -126,11 +138,14 @@ body {
   padding: 0 16px;
   color: #f4dfff;
   text-align: center;
+
+  /* Android 26sp ~ 26px at base 360x800 */
   font-size: 26px;
   line-height: 1.25;
   font-weight: 400;
 }
 
+/* Bottom hint like Compose */
 .swipeHint {
   position: absolute;
   left: 0;
@@ -145,6 +160,11 @@ body {
   animation: hintFloat 1800ms cubic-bezier(0.4, 0.0, 0.2, 1) infinite alternate;
 }
 
+/* IMPORTANT:
+   neonArrow uses transform for width,
+   and hintSlide also uses transform.
+   To avoid transform clobbering each other, wrap arrow.
+*/
 .neonArrowWrap {
   display: inline-block;
   transform: translateX(0px) scaleX(1.35);
@@ -153,7 +173,7 @@ body {
 
 .neonArrow {
   font-family: "Pixel", monospace;
-  font-size: 44px;
+  font-size: 44px; /* ближе к Android 44sp */
   font-weight: 700;
   color: #ffe7ff;
 
@@ -194,7 +214,7 @@ body {
 }
 
 /* ========================================================= */
-/* ===== Gallery styles ==================================== */
+/* ===== Gallery styles (Android 1:1-ish) ================== */
 /* ========================================================= */
 
 .galleryRoot {
@@ -203,6 +223,8 @@ body {
   position: relative;
   overflow: hidden;
   background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
+
+  /* IMPORTANT: stop iOS rubber-band on the whole screen */
   overscroll-behavior: none;
 }
 
@@ -210,12 +232,14 @@ body {
   width: 100%;
   height: 100%;
 
+  /* IMPORTANT: switch to flex so grid can take remaining height properly */
   display: flex;
   flex-direction: column;
   min-height: 0;
 
   position: relative;
 
+  /* keep your padding, but make it stable */
   padding: calc(10px + var(--safe-top)) 16px calc(64px + var(--safe-bottom)) 16px;
 }
 
@@ -317,12 +341,14 @@ body {
 .grid {
   margin-top: 8px;
 
+  /* IMPORTANT: take remaining height, avoid “empty space” bug */
   flex: 1;
   min-height: 0;
 
   overflow: auto;
   padding-bottom: 80px;
 
+  /* IMPORTANT: keep scroll inside grid only (no page pull-down) */
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
@@ -426,6 +452,8 @@ body {
   padding: 10px 20px;
   display: grid;
   place-items: center;
+
+  /* optional: avoid weird clicks during overscroll */
   overscroll-behavior: none;
 }
 
@@ -470,7 +498,7 @@ body {
 }
 
 /* ========================================================= */
-/* ===== Fullscreen overlay ================================= */
+/* ===== Fullscreen (Android overlay 1:1-ish) ============== */
 /* ========================================================= */
 
 .fsBack {
@@ -478,46 +506,49 @@ body {
   inset: 0;
   z-index: 9999;
   background: rgba(5, 0, 18, 0.8);
+
   overscroll-behavior: none;
 }
 
-/* ✅ клик по фону */
 .fsClickClose {
   position: absolute;
   inset: 0;
   z-index: 10000;
 }
 
-/* ✅ зона контента (картинка/карта) всегда имеет место под нижний док */
 .fsImageBoxWrap {
   position: absolute;
   inset: 0;
   z-index: 10001;
 
+  display: block;
+
   padding-left: 18px;
   padding-right: 18px;
+
   padding-top: calc(12px + var(--safe-top));
+  padding-bottom: calc(160px + var(--safe-bottom));
 
-  /* ✅ НЕ угадываем число руками — используем dock */
-  padding-bottom: calc(var(--fs-dock-h) + var(--safe-bottom) + 14px);
-
-  pointer-events: none;
+  pointer-events: none; 
 }
 
-/* карта как была, но ограничиваем по высоте чтобы не лезла в док */
+
+/* Bigger, responsive card:
+   - phones: near previous 360px max
+   - tablets: grows up to ~560px
+   - also limited by height so it doesn't collide with bottom actions
+*/
+
 .fsCard {
   position: absolute;
+
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
 
   width: clamp(320px, 60vw, 560px);
 
-  /* ✅ ключевое: не пересекается с доком */
-  max-height: calc(
-    100dvh - var(--fs-dock-h) - var(--safe-bottom) - var(--safe-top) - 40px
-  );
-
+  max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
   aspect-ratio: 3 / 4;
 
   border-radius: 10px;
@@ -527,10 +558,10 @@ body {
   overflow: hidden;
 
   z-index: 10001;
-  pointer-events: auto;
+  pointer-events: auto; 
 }
 
-/* ❗️картинку НЕ трогаем как ты просил (оставляем cover) */
+
 .fsImg {
   width: 100%;
   height: 100%;
@@ -538,6 +569,7 @@ body {
   display: block;
 }
 
+/* heart + close stay on top corners */
 .fsHeart {
   position: absolute;
   top: calc(12px + var(--safe-top));
@@ -567,11 +599,40 @@ body {
   padding: 0;
 }
 
+/* old arrows (kept to avoid breaking if referenced somewhere) */
+.fsArrowL {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+}
+
+.fsArrowR {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+}
+
+/* NEW arrows inside card (Android-like pixel brackets) */
 .fsArrowIn {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
 
+  /* big invisible tap area (iOS friendly) */
   width: 72px;
   height: 72px;
 
@@ -605,41 +666,18 @@ body {
   right: 6px;
 }
 
-/* ✅ НОВОЕ: фиксированный нижний док — всегда снизу и НЕ на картинке */
-.fsBottomDock {
-  position: fixed;
-  left: 0;
-  right: 0;
-
-  bottom: 0;
-
-  z-index: 10003;
-  pointer-events: auto;
-
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-
-  /* ✅ высота дока = переменная, чтобы контент сверху её учитывал */
-  min-height: calc(var(--fs-dock-h) + var(--safe-bottom));
-  padding: 10px 16px calc(12px + var(--safe-bottom)) 16px;
-
-  /* слегка отделяем док от фона */
-  background: linear-gradient(
-    to top,
-    rgba(5, 0, 18, 0.92),
-    rgba(5, 0, 18, 0.55) 70%,
-    rgba(5, 0, 18, 0)
-  );
-}
-
 .fsFolderPill {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(120px + var(--safe-bottom));
+
   border-radius: 20px;
   background: rgba(0, 0, 0, 0.2);
   padding: 6px 14px;
   cursor: pointer;
-  border: none;
+  z-index: 10002;
+  pointer-events: auto;
 }
 
 .fsFolderText {
@@ -648,8 +686,14 @@ body {
 }
 
 .fsActions {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + var(--safe-bottom));
   display: flex;
   gap: 12px;
+  z-index: 10002;
+  pointer-events: auto;
 }
 
 .fsBtn {
@@ -670,7 +714,7 @@ body {
   color: #ff6b9a;
 }
 
-/* dialog */
+/* simple dialog */
 .dialogBack {
   position: fixed;
   inset: 0;
@@ -679,6 +723,7 @@ body {
   display: grid;
   place-items: center;
   padding: 16px;
+
   overscroll-behavior: none;
 }
 
@@ -695,6 +740,18 @@ body {
   margin-bottom: 10px;
 }
 
+/* .dialogInput {
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffe7ff;
+  outline: none;
+  font-family: "Pixel", monospace;
+  font-size: 12px;
+} */
+
 .dialogInput {
   width: 100%;
   padding: 10px 10px;
@@ -704,6 +761,8 @@ body {
   color: #ffe7ff;
   outline: none;
   font-family: "Pixel", monospace;
+
+  /* IMPORTANT: iOS zoom/jump fix (must be >= 16px) */
   font-size: 16px;
 }
 
