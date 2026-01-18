@@ -201,27 +201,48 @@
 // const PORT = Number(process.env.PORT || 8787);
 // app.listen({ port: PORT, host: "0.0.0.0" });
 
-
 // src/server/index.ts
 
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { z } from "zod";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import "dotenv/config";
 
 const app = Fastify({ logger: true });
 
-/**
- * CORS:
- * - allow localhost dev
- * - allow your server origin
- * - allow no-origin (same-origin / curl)
- */
+// ===== env =====
+const PORT = Number(process.env.PORT || 8787);
+
+const S3_ENDPOINT_INTERNAL =
+  process.env.S3_ENDPOINT_INTERNAL || "http://127.0.0.1:9100";
+const S3_ENDPOINT_PUBLIC = process.env.S3_ENDPOINT_PUBLIC || S3_ENDPOINT_INTERNAL;
+
+const S3_REGION = process.env.S3_REGION || "us-east-1";
+const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY || "minioadmin";
+const S3_SECRET_KEY = process.env.S3_SECRET_KEY || "supersecretpassword";
+const S3_BUCKET = process.env.S3_BUCKET || "yosya";
+const PUBLIC_BASE = process.env.PUBLIC_BASE || "photos";
+
+// IMPORTANT: where server stores meta JSON files
+// If you want it fixed and predictable, set DATA_DIR in .env (recommended).
+const DATA_DIR =
+  process.env.DATA_DIR?.trim() ||
+  path.resolve(process.cwd(), "data");
+
+const DEFAULT_DEVICE_ID = "global";
+
+// ===== CORS =====
+// In prod behind nginx same-origin is usually used, but Safari/PWA can still hit it directly.
+// We'll be permissive by default + allow localhost dev.
 await app.register(cors, {
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
@@ -231,70 +252,49 @@ await app.register(cors, {
       "http://127.0.0.1:5173",
       "http://62.169.27.185",
       "https://62.169.27.185",
-      // "https://yourdomain.com",
     ]);
 
-    cb(null, allowed.has(origin));
+    // allow same host origins + allowed list
+    if (allowed.has(origin)) return cb(null, true);
+
+    // allow any origin in case you're using custom domain later (optional)
+    // comment next line if you want strict allowlist
+    return cb(null, true);
   },
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "OPTIONS", "PUT", "DELETE"],
   allowedHeaders: ["content-type"],
 });
 
-// ===== env =====
-const S3_ENDPOINT_INTERNAL = process.env.S3_ENDPOINT_INTERNAL || "http://127.0.0.1:9100";
-const S3_ENDPOINT_PUBLIC = process.env.S3_ENDPOINT_PUBLIC || S3_ENDPOINT_INTERNAL;
-
-const S3_REGION = process.env.S3_REGION || "us-east-1";
-const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY || "minioadmin";
-const S3_SECRET_KEY = process.env.S3_SECRET_KEY || "supersecretpassword";
-const S3_BUCKET = process.env.S3_BUCKET || "yosya";
-const PUBLIC_BASE = process.env.PUBLIC_BASE || "photos";
-
-/**
- * IMPORTANT:
- * - DATA_DIR must NOT depend on process.cwd() (systemd can run from /)
- * - default: <server_dir>/data
- * - you can override via .env: DATA_DIR=/var/www/yosya/yosya-pwa/src/server/data
- */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DATA_DIR = (process.env.DATA_DIR || path.join(__dirname, "data")).toString();
-
-// Use PUBLIC endpoint for signing so phone can reach it
+// ===== S3 clients =====
 const s3Signer = new S3Client({
   region: S3_REGION,
   endpoint: S3_ENDPOINT_PUBLIC,
   forcePathStyle: true,
-  credentials: {
-    accessKeyId: S3_ACCESS_KEY,
-    secretAccessKey: S3_SECRET_KEY,
-  },
+  credentials: { accessKeyId: S3_ACCESS_KEY, secretAccessKey: S3_SECRET_KEY },
 });
 
-// optional internal client (kept for future ops)
+// internal client for maintenance ops (delete object etc.)
 const s3Internal = new S3Client({
   region: S3_REGION,
   endpoint: S3_ENDPOINT_INTERNAL,
   forcePathStyle: true,
-  credentials: {
-    accessKeyId: S3_ACCESS_KEY,
-    secretAccessKey: S3_SECRET_KEY,
-  },
+  credentials: { accessKeyId: S3_ACCESS_KEY, secretAccessKey: S3_SECRET_KEY },
 });
-void s3Internal; // silence unused
 
-// ===== meta store =====
-// Backward compatible:
-// - if deviceId missing => use "global"
-function normalizeDeviceId(deviceId: unknown): string {
-  if (typeof deviceId === "string" && deviceId.trim().length > 0) return deviceId.trim();
-  return "global";
+// ===== helpers =====
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-function metaPathFor(deviceIdRaw: unknown) {
-  const deviceId = normalizeDeviceId(deviceIdRaw);
-  const safe = deviceId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return path.join(DATA_DIR, `meta-${safe}.json`);
+function safeDeviceId(deviceId: string) {
+  const d = (deviceId || DEFAULT_DEVICE_ID).trim();
+  const safe = d.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return safe.length > 0 ? safe : DEFAULT_DEVICE_ID;
+}
+
+function metaPathFor(deviceId: string) {
+  ensureDataDir();
+  return path.join(DATA_DIR, `meta-${safeDeviceId(deviceId)}.json`);
 }
 
 type MetaItem = {
@@ -310,13 +310,9 @@ type MetaItem = {
 
 type Meta = Record<string, MetaItem>;
 
-function ensureDir(p: string) {
-  if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
-}
-
-function loadMeta(deviceIdRaw: unknown): Meta {
+function loadMeta(deviceId: string): Meta {
   try {
-    const p = metaPathFor(deviceIdRaw);
+    const p = metaPathFor(deviceId);
     if (!fs.existsSync(p)) return {};
     return JSON.parse(fs.readFileSync(p, "utf8"));
   } catch {
@@ -324,66 +320,57 @@ function loadMeta(deviceIdRaw: unknown): Meta {
   }
 }
 
-function saveMeta(deviceIdRaw: unknown, m: Meta) {
-  ensureDir(DATA_DIR);
-  fs.writeFileSync(metaPathFor(deviceIdRaw), JSON.stringify(m, null, 2), "utf8");
+function saveMeta(deviceId: string, m: Meta) {
+  ensureDataDir();
+  fs.writeFileSync(metaPathFor(deviceId), JSON.stringify(m, null, 2), "utf8");
 }
 
-function objKey(deviceIdRaw: unknown, id: string) {
-  const deviceId = normalizeDeviceId(deviceIdRaw);
-  // photos/<deviceId>/<id>
-  return `${PUBLIC_BASE}/${deviceId}/${id}`;
+function objKey(deviceId: string, id: string) {
+  return `${PUBLIC_BASE}/${safeDeviceId(deviceId)}/${id}`;
 }
 
-// ===== error handler: zod -> 400 (instead of 500) =====
-app.setErrorHandler((err, _req, reply) => {
-  const anyErr: any = err;
+function badRequest(reply: any, msg: string, details?: any) {
+  return reply.code(400).send({ error: "Bad Request", message: msg, details });
+}
 
-  // Zod error: make it readable + 400
-  if (anyErr?.issues && Array.isArray(anyErr.issues)) {
-    return reply.code(400).send({
-      error: "Bad Request",
-      message: anyErr.issues,
-    });
-  }
-
-  // default
-  reply.code(500).send({
-    error: "Internal Server Error",
-    message: String(err?.message || err),
-  });
-});
+function nowMs() {
+  return Date.now();
+}
 
 // ===== routes =====
-
 app.get("/api/health", async () => ({ ok: true }));
 
 /**
- * 1) create upload url
- * Backward compatible:
- * - deviceId optional; if missing => "global"
+ * Create upload url
+ * deviceId is OPTIONAL (fallback = "global") so old clients don't break.
  */
 app.post("/api/upload-url", async (req, reply) => {
-  const body = z
+  const parsed = z
     .object({
-      deviceId: z.string().optional(), // ✅ optional
+      deviceId: z.string().optional(),
       id: z.string().min(1),
-      contentType: z.string().default("image/jpeg"),
-      originalName: z.string().default("photo.jpg"),
-      folder: z.string().nullable().default(null),
-      favorite: z.boolean().default(false),
-      createdAt: z.number().int().default(() => Date.now()),
+      contentType: z.string().optional(),
+      originalName: z.string().optional(),
+      folder: z.string().nullable().optional(),
+      favorite: z.boolean().optional(),
+      createdAt: z.number().int().optional(),
       updatedAt: z.number().int().optional(),
     })
-    .parse(req.body);
+    .safeParse(req.body);
 
-  const deviceId = normalizeDeviceId(body.deviceId);
+  if (!parsed.success) {
+    return badRequest(reply, "invalid body", parsed.error.flatten());
+  }
+
+  const body = parsed.data;
+  const deviceId = safeDeviceId(body.deviceId || DEFAULT_DEVICE_ID);
+
   const objectKey = objKey(deviceId, body.id);
 
   const cmd = new PutObjectCommand({
     Bucket: S3_BUCKET,
     Key: objectKey,
-    ContentType: body.contentType,
+    ContentType: body.contentType || "application/octet-stream",
   });
 
   const url = await getSignedUrl(s3Signer, cmd, { expiresIn: 60 * 10 });
@@ -392,38 +379,48 @@ app.post("/api/upload-url", async (req, reply) => {
 });
 
 /**
- * 1.1) confirm upload success (write meta)
+ * Confirm upload success: write meta
  */
 app.post("/api/upload-complete", async (req, reply) => {
-  const body = z
+  const parsed = z
     .object({
-      deviceId: z.string().optional(), // ✅ optional
+      deviceId: z.string().optional(),
       id: z.string().min(1),
-      folder: z.string().nullable().default(null),
-      favorite: z.boolean().default(false),
-      createdAt: z.number().int().default(() => Date.now()),
+      folder: z.string().nullable().optional(),
+      favorite: z.boolean().optional(),
+      createdAt: z.number().int().optional(),
       updatedAt: z.number().int().optional(),
-      originalName: z.string().default("photo.jpg"),
+      originalName: z.string().optional(),
     })
-    .parse(req.body);
+    .safeParse(req.body);
 
-  const deviceId = normalizeDeviceId(body.deviceId);
+  if (!parsed.success) {
+    return badRequest(reply, "invalid body", parsed.error.flatten());
+  }
+
+  const body = parsed.data;
+  const deviceId = safeDeviceId(body.deviceId || DEFAULT_DEVICE_ID);
 
   const meta = loadMeta(deviceId);
   const existing = meta[body.id];
-  const updatedAt = typeof body.updatedAt === "number" ? body.updatedAt : Date.now();
+
+  const createdAt =
+    typeof body.createdAt === "number" ? body.createdAt : nowMs();
+  const updatedAt =
+    typeof body.updatedAt === "number" ? body.updatedAt : nowMs();
 
   meta[body.id] = {
     id: body.id,
     key: objKey(deviceId, body.id),
-    createdAt: typeof body.createdAt === "number" ? body.createdAt : Date.now(),
+    createdAt,
     updatedAt,
-    folder: body.folder,
-    favorite: body.favorite,
+    folder: body.folder ?? null,
+    favorite: body.favorite ?? false,
     deleted: false,
-    originalName: body.originalName,
+    originalName: body.originalName || "photo.jpg",
   };
 
+  // keep tombstone if it existed
   if (existing?.deleted) meta[body.id].deleted = true;
 
   saveMeta(deviceId, meta);
@@ -431,20 +428,24 @@ app.post("/api/upload-complete", async (req, reply) => {
 });
 
 /**
- * 2) get download url
+ * Get download url
  */
 app.post("/api/download-url", async (req, reply) => {
-  const body = z
+  const parsed = z
     .object({
-      deviceId: z.string().optional(), // ✅ optional
+      deviceId: z.string().optional(),
       id: z.string().min(1),
     })
-    .parse(req.body);
+    .safeParse(req.body);
 
-  const deviceId = normalizeDeviceId(body.deviceId);
+  if (!parsed.success) {
+    return badRequest(reply, "invalid body", parsed.error.flatten());
+  }
+
+  const deviceId = safeDeviceId(parsed.data.deviceId || DEFAULT_DEVICE_ID);
 
   const meta = loadMeta(deviceId);
-  const rec = meta[body.id];
+  const rec = meta[parsed.data.id];
   if (!rec || rec.deleted) return reply.code(404).send({ error: "not found" });
 
   const cmd = new GetObjectCommand({
@@ -457,27 +458,35 @@ app.post("/api/download-url", async (req, reply) => {
 });
 
 /**
- * 3) soft delete (tombstone)
+ * Tombstone delete
+ * NOTE: we keep object in MinIO by default. If you later want hard delete, flip flag below.
  */
+const HARD_DELETE_FROM_MINIO = false;
+
 app.post("/api/delete", async (req, reply) => {
-  const body = z
+  const parsed = z
     .object({
-      deviceId: z.string().optional(), // ✅ optional
+      deviceId: z.string().optional(),
       id: z.string().min(1),
     })
-    .parse(req.body);
+    .safeParse(req.body);
 
-  const deviceId = normalizeDeviceId(body.deviceId);
+  if (!parsed.success) {
+    return badRequest(reply, "invalid body", parsed.error.flatten());
+  }
+
+  const deviceId = safeDeviceId(parsed.data.deviceId || DEFAULT_DEVICE_ID);
+  const id = parsed.data.id;
 
   const meta = loadMeta(deviceId);
-  const rec = meta[body.id];
+  const rec = meta[id];
 
   if (!rec) {
-    meta[body.id] = {
-      id: body.id,
-      key: objKey(deviceId, body.id),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+    meta[id] = {
+      id,
+      key: objKey(deviceId, id),
+      createdAt: nowMs(),
+      updatedAt: nowMs(),
       folder: null,
       favorite: false,
       deleted: true,
@@ -488,33 +497,50 @@ app.post("/api/delete", async (req, reply) => {
   }
 
   rec.deleted = true;
-  rec.updatedAt = Date.now();
+  rec.updatedAt = nowMs();
   saveMeta(deviceId, meta);
+
+  if (HARD_DELETE_FROM_MINIO) {
+    try {
+      await s3Internal.send(
+        new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: rec.key })
+      );
+    } catch {
+      // ignore
+    }
+  }
 
   return reply.send({ ok: true });
 });
 
 /**
- * 4) update flags (folder/favorite)
+ * Update flags
  */
 app.post("/api/update", async (req, reply) => {
-  const body = z
+  const parsed = z
     .object({
-      deviceId: z.string().optional(), // ✅ optional
+      deviceId: z.string().optional(),
       id: z.string().min(1),
       folder: z.string().nullable().optional(),
       favorite: z.boolean().optional(),
       updatedAt: z.number().int().optional(),
     })
-    .parse(req.body);
+    .safeParse(req.body);
 
-  const deviceId = normalizeDeviceId(body.deviceId);
+  if (!parsed.success) {
+    return badRequest(reply, "invalid body", parsed.error.flatten());
+  }
+
+  const body = parsed.data;
+  const deviceId = safeDeviceId(body.deviceId || DEFAULT_DEVICE_ID);
 
   const meta = loadMeta(deviceId);
   const rec = meta[body.id];
   if (!rec || rec.deleted) return reply.code(404).send({ error: "not found" });
 
-  const incomingUpdatedAt = typeof body.updatedAt === "number" ? body.updatedAt : Date.now();
+  const incomingUpdatedAt =
+    typeof body.updatedAt === "number" ? body.updatedAt : nowMs();
+
   if (incomingUpdatedAt < rec.updatedAt) return reply.send({ ok: true });
 
   if (body.folder !== undefined) rec.folder = body.folder;
@@ -527,26 +553,26 @@ app.post("/api/update", async (req, reply) => {
 });
 
 /**
- * 5) sync list
- * Backward compatible:
- * - if deviceId missing => "global"
+ * Sync list (includes tombstones)
  */
 app.get("/api/sync", async (req, reply) => {
-  const q = z
-    .object({
-      deviceId: z.string().optional(),
-    })
-    .parse(req.query);
+  const parsed = z
+    .object({ deviceId: z.string().optional() })
+    .safeParse(req.query);
 
-  const deviceId = normalizeDeviceId(q.deviceId);
+  if (!parsed.success) {
+    return badRequest(reply, "invalid query", parsed.error.flatten());
+  }
+
+  const deviceId = safeDeviceId(parsed.data.deviceId || DEFAULT_DEVICE_ID);
   const meta = loadMeta(deviceId);
 
   const list = Object.values(meta).sort(
-    (a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)
+    (a, b) =>
+      (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
   );
 
-  return reply.send({ items: list, deviceId });
+  return reply.send({ items: list });
 });
 
-const PORT = Number(process.env.PORT || 8787);
 app.listen({ port: PORT, host: "0.0.0.0" });
