@@ -1,201 +1,763 @@
-// src/ui/FullscreenOverlay.tsx
+/* src/index.css */
 
-import { useEffect, useRef, useState } from "react";
-import type { PhotoRecord } from "../storage/db";
+@font-face {
+  font-family: "Pixel";
+  src: url("./assets/fonts/press_start_2p.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
-export default function FullscreenOverlay(props: {
-  items: PhotoRecord[];
-  urls: string[];
-  index: number;
-  onClose: () => void;
-  onPrev: () => void;
-  onNext: () => void;
-  onToggleFavorite: () => void;
-  onDelete: () => void;
-  onShare: () => void;
-  onChangeFolder: (name: string) => void;
-}) {
-  const {
-    items,
-    urls,
-    index,
-    onClose,
-    onPrev,
-    onNext,
-    onToggleFavorite,
-    onDelete,
-    onShare,
-    onChangeFolder,
-  } = props;
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left);
+  --safe-right: env(safe-area-inset-right);
+}
 
-  const cur = items[index];
-  const curUrl = urls[index];
+html,
+body,
+#root {
+  height: 100%;
+}
 
-  const totalX = useRef(0);
-  const [showFolderDialog, setShowFolderDialog] = useState(false);
-  const [folderInput, setFolderInput] = useState(cur?.folder ?? "");
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #060016;
+  overflow: hidden;
 
-  useEffect(() => {
-    setFolderInput(cur?.folder ?? "");
-  }, [cur?.id]);
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") onPrev();
-      if (e.key === "ArrowRight") onNext();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onPrev, onNext]);
+  font-family: "Pixel", monospace;
 
-  function onPointerDown() {
-    totalX.current = 0;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ===== App full screen wrapper ===== */
+
+.app {
+  position: fixed;
+  inset: 0;
+
+  width: 100vw;
+  height: 100dvh;
+
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+
+  overflow: hidden;
+  overscroll-behavior: none;
+
+  touch-action: pan-x pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== Core layout ===== */
+
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.scaler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: top left;
+}
+
+.stage {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ========================================================= */
+/* ===== Intro styles ====================================== */
+/* ========================================================= */
+
+.introRoot {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
+}
+
+.introCenter {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.kittyBox {
+  width: 220px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+}
+
+.kittyGif {
+  width: 180px;
+  height: 180px;
+  image-rendering: pixelated;
+}
+
+.introTitle {
+  margin-top: 20px;
+  padding: 0 16px;
+  color: #f4dfff;
+  text-align: center;
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 400;
+}
+
+.swipeHint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  pointer-events: none;
+  animation: hintFloat 1800ms cubic-bezier(0.4, 0.0, 0.2, 1) infinite alternate;
+}
+
+.neonArrowWrap {
+  display: inline-block;
+  transform: translateX(0px) scaleX(1.35);
+  animation: hintSlide 1800ms cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
+}
+
+.neonArrow {
+  font-family: "Pixel", monospace;
+  font-size: 44px;
+  font-weight: 700;
+  color: #ffe7ff;
+
+  text-shadow: 0 0 6px rgba(255, 77, 225, 0.9),
+    0 0 14px rgba(255, 77, 225, 0.55);
+}
+
+@keyframes hintSlide {
+  0% {
+    transform: translateX(0px) scaleX(1.35);
+    opacity: 0;
   }
-
-  function onPointerMove(e: React.PointerEvent) {
-    totalX.current += e.movementX || 0;
+  25% {
+    transform: translateX(-10px) scaleX(1.35);
+    opacity: 1;
   }
-
-  function onPointerUp() {
-    if (totalX.current > 80) onPrev();
-    else if (totalX.current < -80) onNext();
-    totalX.current = 0;
+  70% {
+    transform: translateX(-40px) scaleX(1.35);
+    opacity: 1;
   }
+  85% {
+    transform: translateX(-40px) scaleX(1.35);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(-40px) scaleX(1.35);
+    opacity: 0;
+  }
+}
 
-  if (!cur) return null;
+@keyframes hintFloat {
+  from {
+    transform: translateY(0px);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
 
-  return (
-    <div
-      className="fsBack"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-    >
-      <div className="fsImageBoxWrap" onClick={(e) => e.stopPropagation()}>
-        <div className="fsCard" onClick={(e) => e.stopPropagation()}>
-          {curUrl ? <img className="fsImg" src={curUrl} alt={cur.name} draggable={false} /> : null}
+/* ========================================================= */
+/* ===== Gallery styles ==================================== */
+/* ========================================================= */
 
-          <button
-            type="button"
-            className="fsArrowIn fsArrowInL"
-            aria-label="prev"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPrev();
-            }}
-          >
-            ‹
-          </button>
+.galleryRoot {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
+  overscroll-behavior: none;
+}
 
-          <button
-            type="button"
-            className="fsArrowIn fsArrowInR"
-            aria-label="next"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNext();
-            }}
-          >
-            ›
-          </button>
-        </div>
-      </div>
+.galleryInner {
+  width: 100%;
+  height: 100%;
 
-      <button
-        type="button"
-        className="fsHeart"
-        aria-label="favorite"
-        style={{
-          color: cur.isFavorite ? "#FF5C8A" : "#FFE7FF",
-          transform: `scale(${cur.isFavorite ? 1.25 : 1})`,
-          transition: "transform 180ms ease",
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleFavorite();
-        }}
-      >
-        {cur.isFavorite ? "♥" : "♡"}
-      </button>
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 
-      <button
-        type="button"
-        className="fsClose"
-        aria-label="close"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-      >
-        ✕
-      </button>
+  position: relative;
 
-      <div className="fsBottomDock" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className="fsFolderPill"
-          onClick={(e) => {
-            e.stopPropagation();
-            setFolderInput(cur.folder ?? "");
-            setShowFolderDialog(true);
-          }}
-        >
-          <div className="fsFolderText">Папка: {cur.folder ?? "Без папки"}</div>
-        </button>
+  padding: calc(10px + var(--safe-top)) 16px calc(64px + var(--safe-bottom)) 16px;
+}
 
-        <div className="fsActions">
-          <button
-            className="fsBtn fsBtnShare"
-            onClick={(e) => {
-              e.stopPropagation();
-              onShare();
-            }}
-          >
-            Поделиться
-          </button>
-          <button
-            className="fsBtn fsBtnDelete"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            Удалить
-          </button>
-        </div>
-      </div>
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
 
-      <div className="fsClickClose" onClick={onClose} />
+.headerTitle {
+  color: #ffe7ff;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
 
-      {showFolderDialog ? (
-        <div className="dialogBack" onClick={() => setShowFolderDialog(false)}>
-          <div className="dialogCard" onClick={(e) => e.stopPropagation()}>
-            <div className="dialogTitle">Папка</div>
-            <input
-              className="dialogInput"
-              value={folderInput}
-              onChange={(e) => setFolderInput(e.target.value)}
-              placeholder="Имя папки (пусто = без папки)"
-            />
-            <div className="dialogBtns">
-              <button className="dialogBtn" onClick={() => setShowFolderDialog(false)}>
-                Отмена
-              </button>
-              <button
-                className="dialogBtn"
-                onClick={() => {
-                  onChangeFolder(folderInput);
-                  setShowFolderDialog(false);
-                }}
-              >
-                Сохранить
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+.headerHeart {
+  color: #ff5c8a;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.headerSub {
+  margin-top: 4px;
+  color: #ffb3d9;
+  font-size: 12px;
+  text-align: center;
+}
+
+.topControlsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  gap: 8px;
+}
+
+.pill {
+  border-radius: 20px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffe7ff;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+}
+
+.pillSelected {
+  background: rgba(255, 142, 219, 0.33);
+  color: #ffffff;
+}
+
+.selectionHint {
+  margin-top: 6px;
+  color: #ffb3d9;
+  font-size: 11px;
+}
+
+.selectionBar {
+  margin-top: 6px;
+  border-radius: 16px;
+  background: rgba(179, 0, 93, 0.4);
+  padding: 6px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.selectionBarText {
+  color: #ffe7ff;
+  font-size: 12px;
+}
+
+.selectionActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.smallChip {
+  border-radius: 20px;
+  padding: 4px 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.smallChipBlue {
+  background: rgba(255, 142, 219, 0.2);
+  color: #ffffff;
+}
+
+.smallChipWhite {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffe7ff;
+}
+
+.grid {
+  margin-top: 8px;
+
+  flex: 1;
+  min-height: 0;
+
+  overflow: auto;
+  padding-bottom: 80px;
+
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.gridInner {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.card {
+  padding: 6px;
+}
+
+.cardBox {
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+
+  background: linear-gradient(135deg, #2b163e, #1a0a2d);
+  border: 2px solid #ffe7ff;
+  cursor: pointer;
+  position: relative;
+  padding: 4px;
+}
+
+.cardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.heartBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+
+  background: rgba(0, 0, 0, 0.53);
+  border-radius: 999px;
+  padding: 2px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.heartText {
+  font-size: 16px;
+}
+
+.selectDot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+
+  background: rgba(0, 0, 0, 0.53);
+  cursor: pointer;
+  user-select: none;
+}
+
+.selectDotSelected {
+  background: #ff5c8a;
+}
+
+.selectionOverlay {
+  position: absolute;
+  inset: 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.fab {
+  position: absolute;
+  right: 20px;
+  bottom: 80px;
+
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+
+  background: #ff9edb;
+  color: #2a0735;
+  border: none;
+  cursor: pointer;
+
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
+
+.bottomBarWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 20px;
+  display: grid;
+  place-items: center;
+  overscroll-behavior: none;
+}
+
+.bottomBar {
+  width: 100%;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 20px;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bottomItem {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #ffe7ff;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  opacity: 0.6;
+  transform: scale(1);
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.bottomItemSelected {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.bottomIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bottomLabel {
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ========================================================= */
+/* ===== Fullscreen (Android overlay 1:1-ish) ============== */
+/* ========================================================= */
+
+.fsBack {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(5, 0, 18, 0.8);
+  overscroll-behavior: none;
+}
+
+.fsClickClose {
+  position: absolute;
+  inset: 0;
+  z-index: 10000;
+}
+
+/* ✅ we reserve bottom space for dock so buttons never overlap */
+.fsImageBoxWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 10001;
+
+  display: block;
+
+  padding-left: 18px;
+  padding-right: 18px;
+
+  padding-top: calc(12px + var(--safe-top));
+  padding-bottom: calc(190px + var(--safe-bottom));
+
+  pointer-events: none;
+}
+
+/* keep responsive card */
+.fsCard {
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  width: clamp(320px, 60vw, 560px);
+
+  max-height: calc(100dvh - (260px + var(--safe-top) + var(--safe-bottom)));
+  aspect-ratio: 3 / 4;
+
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2b163e, #130826);
+  border: 3px solid #ffe7ff;
+  padding: 4px;
+  overflow: hidden;
+
+  z-index: 10001;
+  pointer-events: auto;
+}
+
+/* ✅ IMPORTANT: do NOT crop image anymore */
+.fsImg {
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain; /* <-- was cover, that cropped */
+  object-position: center;
+
+  display: block;
+
+  /* so letterboxing looks intentional */
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* heart + close */
+.fsHeart {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  left: 16px;
+  font-size: 26px;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.fsClose {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  right: 16px;
+  font-size: 24px;
+  color: #ffb3d9;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* old arrows */
+.fsArrowL {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+}
+
+.fsArrowR {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+}
+
+/* arrows inside card */
+.fsArrowIn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 72px;
+  height: 72px;
+
+  display: grid;
+  place-items: center;
+
+  background: transparent;
+  border: none;
+  padding: 0;
+
+  color: #ffe7ff;
+  font-family: "Pixel", monospace;
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 700;
+
+  cursor: pointer;
+  user-select: none;
+
+  -webkit-appearance: none;
+  appearance: none;
+
+  touch-action: manipulation;
+}
+
+.fsArrowInL {
+  left: 6px;
+}
+
+.fsArrowInR {
+  right: 6px;
+}
+
+/* bottom dock */
+.fsBottomDock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  z-index: 10002;
+  pointer-events: auto;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 16px calc(12px + var(--safe-bottom)) 16px;
+}
+
+.fsFolderPill {
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 14px;
+  cursor: pointer;
+
+  z-index: 10002;
+  pointer-events: auto;
+
+  background-clip: padding-box;
+  border: none;
+}
+
+.fsFolderText {
+  color: #ffe7ff;
+  font-size: 12px;
+}
+
+.fsActions {
+  display: flex;
+  gap: 12px;
+
+  z-index: 10002;
+  pointer-events: auto;
+}
+
+.fsBtn {
+  border-radius: 20px;
+  padding: 6px 14px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.fsBtnShare {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffe7ff;
+}
+
+.fsBtnDelete {
+  background: rgba(255, 107, 154, 0.2);
+  color: #ff6b9a;
+}
+
+/* dialog */
+.dialogBack {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+
+  overscroll-behavior: none;
+}
+
+.dialogCard {
+  width: min(92vw, 420px);
+  background: #3b0030;
+  border-radius: 16px;
+  padding: 14px;
+  color: #ffe7ff;
+}
+
+.dialogTitle {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.dialogInput {
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffe7ff;
+  outline: none;
+  font-family: "Pixel", monospace;
+  font-size: 16px;
+}
+
+.dialogBack {
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom)) 16px;
+}
+
+.dialogCard {
+  max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - 32px);
+  overflow: auto;
+}
+
+.dialogBtns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dialogBtn {
+  border: none;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffe7ff;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12px;
 }

@@ -207,7 +207,6 @@
 //   );
 // }
 
-
 // src/ui/FullscreenOverlay.tsx
 
 import { useEffect, useRef, useState } from "react";
@@ -283,13 +282,10 @@ export default function FullscreenOverlay(props: {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      {/* NOTE: fsClickClose перенесли В КОНЕЦ, чтобы он был "под" кнопками по z-index */}
-
       <div className="fsImageBoxWrap" onClick={(e) => e.stopPropagation()}>
         <div className="fsCard" onClick={(e) => e.stopPropagation()}>
           {curUrl ? <img className="fsImg" src={curUrl} alt={cur.name} draggable={false} /> : null}
 
-          {/* arrows INSIDE card (Android-like) */}
           <button
             type="button"
             className="fsArrowIn fsArrowInL"
@@ -316,7 +312,6 @@ export default function FullscreenOverlay(props: {
         </div>
       </div>
 
-      {/* heart */}
       <button
         type="button"
         className="fsHeart"
@@ -334,7 +329,6 @@ export default function FullscreenOverlay(props: {
         {cur.isFavorite ? "♥" : "♡"}
       </button>
 
-      {/* close */}
       <button
         type="button"
         className="fsClose"
@@ -347,9 +341,7 @@ export default function FullscreenOverlay(props: {
         ✕
       </button>
 
-      {/* ✅ NEW: bottom dock (always bottom, never overlaps image) */}
       <div className="fsBottomDock" onClick={(e) => e.stopPropagation()}>
-        {/* folder pill */}
         <button
           type="button"
           className="fsFolderPill"
@@ -362,7 +354,6 @@ export default function FullscreenOverlay(props: {
           <div className="fsFolderText">Папка: {cur.folder ?? "Без папки"}</div>
         </button>
 
-        {/* actions */}
         <div className="fsActions">
           <button
             className="fsBtn fsBtnShare"
@@ -385,10 +376,8 @@ export default function FullscreenOverlay(props: {
         </div>
       </div>
 
-      {/* ✅ клик по фону — закрыть (но слой теперь ниже кнопок) */}
       <div className="fsClickClose" onClick={onClose} />
 
-      {/* folder dialog */}
       {showFolderDialog ? (
         <div className="dialogBack" onClick={() => setShowFolderDialog(false)}>
           <div className="dialogCard" onClick={(e) => e.stopPropagation()}>
