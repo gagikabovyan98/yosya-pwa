@@ -15,7 +15,18 @@ export default function FullscreenOverlay(props: {
   onShare: () => void;
   onChangeFolder: (name: string) => void;
 }) {
-  const { items, urls, index, onClose, onPrev, onNext, onToggleFavorite, onDelete, onShare, onChangeFolder } = props;
+  const {
+    items,
+    urls,
+    index,
+    onClose,
+    onPrev,
+    onNext,
+    onToggleFavorite,
+    onDelete,
+    onShare,
+    onChangeFolder,
+  } = props;
 
   const cur = items[index];
   const curUrl = urls[index];
@@ -67,6 +78,31 @@ export default function FullscreenOverlay(props: {
       <div className="fsImageBoxWrap" onClick={(e) => e.stopPropagation()}>
         <div className="fsCard" onClick={(e) => e.stopPropagation()}>
           {curUrl ? <img className="fsImg" src={curUrl} alt={cur.name} draggable={false} /> : null}
+
+          {/* arrows INSIDE card (Android-like) */}
+          <button
+            type="button"
+            className="fsArrowIn fsArrowInL"
+            aria-label="prev"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrev();
+            }}
+          >
+            ‹
+          </button>
+
+          <button
+            type="button"
+            className="fsArrowIn fsArrowInR"
+            aria-label="next"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext();
+            }}
+          >
+            ›
+          </button>
         </div>
       </div>
 
@@ -88,14 +124,6 @@ export default function FullscreenOverlay(props: {
         {cur.isFavorite ? "♥" : "♡"}
       </button>
 
-      {/* arrows */}
-      <button type="button" className="fsArrowL" aria-label="prev" onClick={(e) => { e.stopPropagation(); onPrev(); }}>
-        ‹
-      </button>
-      <button type="button" className="fsArrowR" aria-label="next" onClick={(e) => { e.stopPropagation(); onNext(); }}>
-        ›
-      </button>
-
       {/* folder pill */}
       <button
         type="button"
@@ -111,24 +139,41 @@ export default function FullscreenOverlay(props: {
 
       {/* actions */}
       <div className="fsActions">
-        <button className="fsBtn fsBtnShare" onClick={(e) => { e.stopPropagation(); onShare(); }}>
+        <button
+          className="fsBtn fsBtnShare"
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare();
+          }}
+        >
           Поделиться
         </button>
-        <button className="fsBtn fsBtnDelete" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
+        <button
+          className="fsBtn fsBtnDelete"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
           Удалить
         </button>
       </div>
 
       {/* close */}
-      <button type="button" className="fsClose" aria-label="close" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+      <button
+        type="button"
+        className="fsClose"
+        aria-label="close"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
         ✕
       </button>
 
       {/* ✅ клик по фону — закрыть (но слой теперь ниже кнопок) */}
-      <div
-        className="fsClickClose"
-        onClick={onClose}
-      />
+      <div className="fsClickClose" onClick={onClose} />
 
       {/* folder dialog */}
       {showFolderDialog ? (
@@ -142,7 +187,9 @@ export default function FullscreenOverlay(props: {
               placeholder="Имя папки (пусто = без папки)"
             />
             <div className="dialogBtns">
-              <button className="dialogBtn" onClick={() => setShowFolderDialog(false)}>Отмена</button>
+              <button className="dialogBtn" onClick={() => setShowFolderDialog(false)}>
+                Отмена
+              </button>
               <button
                 className="dialogBtn"
                 onClick={() => {

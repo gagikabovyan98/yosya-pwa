@@ -525,18 +525,32 @@ body {
 
   display: grid;
   place-items: center;
-  padding: 0 18px;
+
+  /* give room so UI can sit above/below */
+  padding: calc(12px + var(--safe-top)) 18px calc(160px + var(--safe-bottom)) 18px;
+
   z-index: 10001;
 }
 
+/* Bigger, responsive card:
+   - phones: near previous 360px max
+   - tablets: grows up to ~560px
+   - also limited by height so it doesn't collide with bottom actions
+*/
 .fsCard {
-  width: min(92vw, 360px);
+  position: relative;
+
+  width: clamp(320px, 60vw, 560px);
+  max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
+
   aspect-ratio: 3 / 4;
+
   border-radius: 10px;
   background: linear-gradient(135deg, #2b163e, #130826);
   border: 3px solid #ffe7ff;
   padding: 4px;
   overflow: hidden;
+
   z-index: 10001;
 }
 
@@ -547,6 +561,7 @@ body {
   display: block;
 }
 
+/* heart + close stay on top corners */
 .fsHeart {
   position: absolute;
   top: calc(12px + var(--safe-top));
@@ -576,6 +591,7 @@ body {
   padding: 0;
 }
 
+/* old arrows (kept to avoid breaking if referenced somewhere) */
 .fsArrowL {
   position: absolute;
   top: 50%;
@@ -602,11 +618,51 @@ body {
   pointer-events: auto;
 }
 
+/* NEW arrows inside card (Android-like pixel brackets) */
+.fsArrowIn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+
+  /* big invisible tap area (iOS friendly) */
+  width: 72px;
+  height: 72px;
+
+  display: grid;
+  place-items: center;
+
+  background: transparent;
+  border: none;
+  padding: 0;
+
+  color: #ffe7ff;
+  font-family: "Pixel", monospace;
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 700;
+
+  cursor: pointer;
+  user-select: none;
+
+  -webkit-appearance: none;
+  appearance: none;
+
+  touch-action: manipulation;
+}
+
+.fsArrowInL {
+  left: 6px;
+}
+
+.fsArrowInR {
+  right: 6px;
+}
+
 .fsFolderPill {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 120px;
+  bottom: calc(120px + var(--safe-bottom));
 
   border-radius: 20px;
   background: rgba(0, 0, 0, 0.2);
@@ -625,7 +681,7 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 76px;
+  bottom: calc(76px + var(--safe-bottom));
   display: flex;
   gap: 12px;
   z-index: 10002;
