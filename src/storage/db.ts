@@ -2,7 +2,12 @@
 
 // export type BackgroundStyle = "PURPLE" | "PINK";
 
-// export type SyncState = "local" | "pending_upload" | "pending_update" | "pending_delete" | "synced";
+// export type SyncState =
+//   | "local"
+//   | "pending_upload"
+//   | "pending_update"
+//   | "pending_delete"
+//   | "synced";
 
 // export type PhotoRecord = {
 //   id: string;
@@ -36,7 +41,10 @@
 // }
 
 // function openDb(): Promise<IDBDatabase> {
-//   return new Promise((resolve, reject) => {
+//   // IMPORTANT: reuse single open promise (avoid opening multiple connections)
+//   if (dbPromise) return dbPromise;
+
+//   dbPromise = new Promise((resolve, reject) => {
 //     const req = indexedDB.open(DB_NAME, DB_VERSION);
 
 //     req.onupgradeneeded = () => {
@@ -53,9 +61,12 @@
 //       } else {
 //         const store = req.transaction!.objectStore(STORE_PHOTOS);
 //         // add new indexes safely
-//         if (!store.indexNames.contains("deleted")) store.createIndex("deleted", "deleted", { unique: false });
-//         if (!store.indexNames.contains("syncState")) store.createIndex("syncState", "syncState", { unique: false });
-//         if (!store.indexNames.contains("updatedAt")) store.createIndex("updatedAt", "updatedAt", { unique: false });
+//         if (!store.indexNames.contains("deleted"))
+//           store.createIndex("deleted", "deleted", { unique: false });
+//         if (!store.indexNames.contains("syncState"))
+//           store.createIndex("syncState", "syncState", { unique: false });
+//         if (!store.indexNames.contains("updatedAt"))
+//           store.createIndex("updatedAt", "updatedAt", { unique: false });
 //       }
 
 //       if (!db.objectStoreNames.contains(STORE_META)) {
@@ -63,11 +74,40 @@
 //       }
 //     };
 
-//     req.onsuccess = () => resolve(req.result);
-//     req.onerror = () => reject(req.error);
+//     req.onsuccess = () => {
+//       const db = req.result;
+
+//       // if DB gets deleted/blocked, reset promise so next call can re-open
+//       db.onclose = () => {
+//         dbPromise = null;
+//       };
+//       db.onerror = () => {
+//         // keep silent; individual tx requests handle errors
+//       };
+
+//       resolve(db);
+//     };
+
+//     req.onerror = () => {
+//       dbPromise = null;
+//       reject(req.error);
+//     };
+
+//     req.onblocked = () => {
+//       // another tab keeps old version open; not fatal here
+//       // leave promise pending until unblocked / error / success
+//     };
 //   });
+
+//   return dbPromise;
 // }
 
+// /**
+//  * ✅ IMPORTANT FIX:
+//  * We must resolve after `tx.oncomplete`, not just after request success.
+//  * On iOS/Safari, `req.onsuccess` can fire before transaction is committed,
+//  * causing "folder not saved / not visible" race conditions.
+//  */
 // function withStore<T>(
 //   storeName: string,
 //   mode: IDBTransactionMode,
@@ -78,11 +118,28 @@
 //       const tx = db.transaction(storeName, mode);
 //       const store = tx.objectStore(storeName);
 
+//       let result!: T;
 //       const req = fn(store);
-//       req.onsuccess = () => resolve(req.result);
-//       req.onerror = () => reject(req.error);
 
-//       tx.onabort = () => reject(tx.error);
+//       req.onsuccess = () => {
+//         result = req.result;
+//       };
+
+//       req.onerror = () => {
+//         reject(req.error);
+//       };
+
+//       tx.oncomplete = () => {
+//         resolve(result);
+//       };
+
+//       tx.onerror = () => {
+//         reject(tx.error);
+//       };
+
+//       tx.onabort = () => {
+//         reject(tx.error);
+//       };
 //     });
 //   });
 // }
@@ -108,10 +165,12 @@
 //   bytes[6] = (bytes[6] & 0x0f) | 0x40;
 //   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-//   const hex = [...bytes].map(b => b.toString(16).padStart(2, "0")).join("");
-//   return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+//   const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+//   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(
+//     hex.length - 16,
+//     hex.length - 12
+//   )}-${hex.slice(hex.length - 12)}`;
 // }
-
 
 // function normalizePhotoRow(row: any): PhotoRecord | null {
 //   if (!row || typeof row !== "object") return null;
@@ -121,6 +180,7 @@
 //   const updatedAt = typeof row.updatedAt === "number" ? row.updatedAt : createdAt;
 
 //   const deleted = typeof row.deleted === "boolean" ? row.deleted : false;
+
 //   const syncState: SyncState =
 //     row.syncState === "pending_upload" ||
 //     row.syncState === "pending_update" ||
@@ -170,7 +230,11 @@
 //   return rec || undefined;
 // }
 
-// export async function addPhotos(files: File[], folder: string | null = null, favorite: boolean = false): Promise<void> {
+// export async function addPhotos(
+//   files: File[],
+//   folder: string | null = null,
+//   favorite: boolean = false
+// ): Promise<void> {
 //   const db = await openDb();
 //   const ts = nowMs();
 
@@ -271,12 +335,7 @@
 //   const rec = await getPhoto(id);
 //   if (!rec) return;
 
-//   if (rec.deleted) {
-//     // keep tombstone as synced delete (or you can hardDeletePhoto)
-//     rec.syncState = "synced";
-//   } else {
-//     rec.syncState = "synced";
-//   }
+//   rec.syncState = "synced";
 //   rec.updatedAt = nowMs();
 
 //   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
@@ -325,7 +384,9 @@
 // }
 
 // export async function setSyncEnabled(enabled: boolean): Promise<void> {
-//   await withStore(STORE_META, "readwrite", (s) => s.put({ key: "syncEnabled", value: !!enabled })).then(() => undefined);
+//   await withStore(STORE_META, "readwrite", (s) => s.put({ key: "syncEnabled", value: !!enabled })).then(
+//     () => undefined
+//   );
 // }
 
 // export async function getLastSyncAt(): Promise<number | null> {
@@ -404,7 +465,6 @@
 // }
 
 
-
 // src/storage/db.ts
 
 export type BackgroundStyle = "PURPLE" | "PINK";
@@ -435,7 +495,7 @@ export type PhotoRecord = {
 };
 
 const DB_NAME = "yosya_db";
-const DB_VERSION = 3; // bump because schema changed
+const DB_VERSION = 4; // ✅ bump: added deviceId + safer meta evolution
 
 const STORE_PHOTOS = "photos";
 const STORE_META = "meta";
@@ -467,7 +527,6 @@ function openDb(): Promise<IDBDatabase> {
         store.createIndex("updatedAt", "updatedAt", { unique: false });
       } else {
         const store = req.transaction!.objectStore(STORE_PHOTOS);
-        // add new indexes safely
         if (!store.indexNames.contains("deleted"))
           store.createIndex("deleted", "deleted", { unique: false });
         if (!store.indexNames.contains("syncState"))
@@ -484,13 +543,10 @@ function openDb(): Promise<IDBDatabase> {
     req.onsuccess = () => {
       const db = req.result;
 
-      // if DB gets deleted/blocked, reset promise so next call can re-open
       db.onclose = () => {
         dbPromise = null;
       };
-      db.onerror = () => {
-        // keep silent; individual tx requests handle errors
-      };
+      db.onerror = () => {};
 
       resolve(db);
     };
@@ -500,10 +556,7 @@ function openDb(): Promise<IDBDatabase> {
       reject(req.error);
     };
 
-    req.onblocked = () => {
-      // another tab keeps old version open; not fatal here
-      // leave promise pending until unblocked / error / success
-    };
+    req.onblocked = () => {};
   });
 
   return dbPromise;
@@ -512,8 +565,6 @@ function openDb(): Promise<IDBDatabase> {
 /**
  * ✅ IMPORTANT FIX:
  * We must resolve after `tx.oncomplete`, not just after request success.
- * On iOS/Safari, `req.onsuccess` can fire before transaction is committed,
- * causing "folder not saved / not visible" race conditions.
  */
 function withStore<T>(
   storeName: string,
@@ -556,19 +607,15 @@ function nowMs() {
 }
 
 function genId(): string {
-  // modern browsers (HTTPS usually)
   const c: any = globalThis.crypto;
   if (c?.randomUUID) return c.randomUUID();
 
-  // fallback: uuid v4 using getRandomValues
   const bytes = new Uint8Array(16);
   if (c?.getRandomValues) c.getRandomValues(bytes);
   else {
-    // very old fallback (last resort)
     for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
   }
 
-  // RFC4122 v4
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
@@ -582,7 +629,6 @@ function genId(): string {
 function normalizePhotoRow(row: any): PhotoRecord | null {
   if (!row || typeof row !== "object") return null;
 
-  // back-compat with older records (DB_VERSION 2)
   const createdAt = typeof row.createdAt === "number" ? row.createdAt : nowMs();
   const updatedAt = typeof row.updatedAt === "number" ? row.updatedAt : createdAt;
 
@@ -623,7 +669,6 @@ export async function listPhotos(): Promise<PhotoRecord[]> {
   return list;
 }
 
-// for sync/debug (includes deleted tombstones)
 export async function listAllPhotos(): Promise<PhotoRecord[]> {
   const rows = await withStore<any[]>(STORE_PHOTOS, "readonly", (s) => s.getAll());
   const list = (rows || []).map(normalizePhotoRow).filter((x): x is PhotoRecord => !!x);
@@ -669,7 +714,6 @@ export async function addPhotos(
     tx.onabort = () => reject(tx.error);
   });
 
-  // keep folder in folders list
   if (folder) {
     const folders = await getFolders();
     if (!folders.includes(folder)) {
@@ -679,28 +723,21 @@ export async function addPhotos(
   }
 }
 
-// IMPORTANT: tombstone delete (do not remove record -> so it never "returns" after sync)
 export async function softDeletePhoto(id: string): Promise<void> {
   const rec = await getPhoto(id);
   if (!rec) return;
 
   rec.deleted = true;
   rec.updatedAt = nowMs();
-
-  // if not uploaded yet: still keep as pending_delete (server will just accept delete)
   rec.syncState = "pending_delete";
 
-  // optionally drop blob to reduce storage (keep tiny blob)
   try {
     rec.blob = new Blob([], { type: rec.blob?.type || "application/octet-stream" });
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
 }
 
-// hard delete only after successful delete sync (optional cleanup)
 export async function hardDeletePhoto(id: string): Promise<void> {
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.delete(id)).then(() => undefined);
 }
@@ -711,8 +748,6 @@ export async function toggleFavorite(id: string): Promise<void> {
 
   rec.isFavorite = !rec.isFavorite;
   rec.updatedAt = nowMs();
-
-  // if already synced -> update; else keep pending_upload
   rec.syncState = rec.syncState === "synced" ? "pending_update" : "pending_upload";
 
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
@@ -724,7 +759,6 @@ export async function setPhotoFolder(id: string, folder: string | null): Promise
 
   rec.folder = folder;
   rec.updatedAt = nowMs();
-
   rec.syncState = rec.syncState === "synced" ? "pending_update" : "pending_upload";
 
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
@@ -757,7 +791,7 @@ export function blobToUrl(blob: Blob): string {
   return URL.createObjectURL(blob);
 }
 
-/* ===== meta (bgStyle, folders, sync) ===== */
+/* ===== meta ===== */
 
 type MetaRow = { key: string; value: any };
 
@@ -787,7 +821,7 @@ export async function setFolders(folders: string[]): Promise<void> {
 export async function getSyncEnabled(): Promise<boolean> {
   const row = await withStore<MetaRow | undefined>(STORE_META, "readonly", (s) => s.get("syncEnabled"));
   const v = row?.value;
-  return v === false ? false : true; // default ON
+  return v === false ? false : true;
 }
 
 export async function setSyncEnabled(enabled: boolean): Promise<void> {
@@ -804,6 +838,113 @@ export async function getLastSyncAt(): Promise<number | null> {
 
 export async function setLastSyncAt(ts: number): Promise<void> {
   await withStore(STORE_META, "readwrite", (s) => s.put({ key: "lastSyncAt", value: ts })).then(() => undefined);
+}
+
+/**
+ * ✅ Device ID: each device has its own namespace on the server.
+ * Stored in IndexedDB meta (survives refresh; if user clears site data - it will be re-generated).
+ */
+export async function getDeviceId(): Promise<string> {
+  const row = await withStore<MetaRow | undefined>(STORE_META, "readonly", (s) => s.get("deviceId"));
+  const v = row?.value;
+  if (typeof v === "string" && v.trim().length > 0) return v.trim();
+
+  const id = genId();
+  await withStore(STORE_META, "readwrite", (s) => s.put({ key: "deviceId", value: id })).then(() => undefined);
+  return id;
+}
+
+/* ===== server apply helpers (pull sync) ===== */
+
+export type ServerMetaItem = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  folder: string | null;
+  favorite: boolean;
+  deleted: boolean;
+  originalName: string;
+};
+
+/**
+ * Apply server tombstone: if server says deleted => ensure local deleted too.
+ * We keep it as pending_delete or synced? Here: mark synced (because server already has tombstone).
+ */
+export async function applyServerDeleted(id: string): Promise<void> {
+  const rec = await getPhoto(id);
+  if (!rec) return;
+
+  if (rec.deleted) {
+    // already deleted locally -> just mark synced
+    await markSynced(id);
+    return;
+  }
+
+  rec.deleted = true;
+  rec.updatedAt = nowMs();
+  rec.syncState = "synced";
+
+  try {
+    rec.blob = new Blob([], { type: rec.blob?.type || "application/octet-stream" });
+  } catch {}
+
+  await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
+}
+
+/**
+ * Upsert server metadata into local record (without downloading blob).
+ * Blob is handled separately via download-url.
+ */
+export async function upsertLocalMetaFromServer(item: ServerMetaItem): Promise<void> {
+  const rec = await getPhoto(item.id);
+
+  if (!rec) return;
+
+  // if local has pending changes, do not overwrite local metadata
+  if (rec.syncState.startsWith("pending_")) return;
+
+  // server wins if newer
+  if (typeof item.updatedAt === "number" && item.updatedAt <= rec.updatedAt) return;
+
+  rec.folder = item.folder ?? null;
+  rec.isFavorite = !!item.favorite;
+  rec.deleted = !!item.deleted;
+  rec.name = item.originalName || rec.name;
+  rec.updatedAt = typeof item.updatedAt === "number" ? item.updatedAt : rec.updatedAt;
+  rec.syncState = "synced";
+
+  if (rec.deleted) {
+    try {
+      rec.blob = new Blob([], { type: rec.blob?.type || "application/octet-stream" });
+    } catch {}
+  }
+
+  await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
+}
+
+/**
+ * Insert new local record from server download blob.
+ */
+export async function insertDownloadedPhoto(
+  item: ServerMetaItem,
+  blob: Blob
+): Promise<void> {
+  const existing = await getPhoto(item.id);
+  if (existing) return;
+
+  const rec: PhotoRecord = {
+    id: item.id,
+    name: item.originalName || "photo.jpg",
+    createdAt: item.createdAt || nowMs(),
+    updatedAt: item.updatedAt || item.createdAt || nowMs(),
+    folder: item.folder ?? null,
+    isFavorite: !!item.favorite,
+    deleted: !!item.deleted,
+    syncState: "synced",
+    blob: blob,
+  };
+
+  await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
 }
 
 /* ===== defaults ===== */
@@ -829,7 +970,6 @@ export async function ensureDefaults(): Promise<void> {
     "/yosya8.jpg",
   ];
 
-  // 1) fetch blobs without transaction
   const blobs: { name: string; blob: Blob }[] = [];
   for (const url of defaults) {
     const res = await fetch(url, { cache: "no-store" });
@@ -838,7 +978,6 @@ export async function ensureDefaults(): Promise<void> {
     blobs.push({ name: url.split("/").pop() || "default.jpg", blob });
   }
 
-  // 2) write fast in one tx
   const db = await openDb();
   const ts = nowMs();
 
