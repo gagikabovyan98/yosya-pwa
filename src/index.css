@@ -74,45 +74,29 @@ textarea {
 .app {
   position: fixed;
   inset: 0;
-
-  /* Cover iOS PWA viewport correctly */
   width: 100vw;
   height: 100dvh;
-
-  /* IMPORTANT:
-     We DO NOT add safe-area padding here,
-     because you already scale a fixed stage (DESIGN_H=800).
-     Padding here shifts whole app and breaks gestures in intro.
-     Safe-area must be handled INSIDE screens (gallery padding etc.).
-  */
   padding: 0;
-
   overflow: hidden;
   background: #060016;
 
-  /* Prevent overscroll leaking outside */
   overscroll-behavior: none;
 
-  /* IMPORTANT:
-     Don't allow page to pan/scroll.
-     Gestures should be handled by your components (intro swipe).
-  */
-  touch-action: none;
+  /* ВАЖНО: не none, иначе iOS ломает scroll внутри grid */
+  touch-action: pan-x pan-y;
 }
 
-/* Core fullscreen viewport */
 .viewport {
   position: absolute;
   inset: 0;
-
   overflow: hidden;
   background: #060016;
-
   overscroll-behavior: none;
 
-  /* iOS: avoid accidental scroll chaining */
-  touch-action: none;
+  /* тоже не none */
+  touch-action: pan-x pan-y;
 }
+
 
 /* scaler gets scale from App.tsx */
 .scaler {
@@ -262,19 +246,15 @@ textarea {
 .galleryInner {
   width: 100%;
   height: 100%;
-
   display: flex;
   flex-direction: column;
   min-height: 0;
-
   position: relative;
 
-  /* IMPORTANT:
-     Safe-area padding belongs here (screen UI),
-     not on .app.
-  */
-  padding: calc(10px + var(--safe-top)) 16px calc(64px + var(--safe-bottom)) 16px;
+  /* safe-bottom УБИРАЕМ отсюда, оставляем только top */
+  padding: calc(10px + var(--safe-top)) 16px 64px 16px;
 }
+
 
 .headerTitleRow {
   display: flex;
@@ -489,17 +469,14 @@ textarea {
   position: absolute;
   left: 0;
   right: 0;
-
   bottom: 0;
   padding: 10px 20px;
+  padding-bottom: calc(10px + var(--safe-bottom));
   display: grid;
   place-items: center;
-
-  /* IMPORTANT: add safe-bottom so bar never floats */
-  padding-bottom: calc(10px + var(--safe-bottom));
-
   overscroll-behavior: none;
 }
+
 
 .bottomBar {
   width: 100%;
