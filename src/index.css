@@ -1,4 +1,3 @@
-
 /* src/index.css */
 
 @font-face {
@@ -507,7 +506,6 @@ body {
   inset: 0;
   z-index: 9999;
   background: rgba(5, 0, 18, 0.8);
-
   overscroll-behavior: none;
 }
 
@@ -527,19 +525,16 @@ body {
   padding-left: 18px;
   padding-right: 18px;
 
+  /* top stays as before */
   padding-top: calc(12px + var(--safe-top));
-  padding-bottom: calc(160px + var(--safe-bottom));
 
-  pointer-events: none; 
+  /* ✅ reserve space for bottom dock so card never overlaps buttons */
+  padding-bottom: calc(190px + var(--safe-bottom));
+
+  pointer-events: none;
 }
 
-
-/* Bigger, responsive card:
-   - phones: near previous 360px max
-   - tablets: grows up to ~560px
-   - also limited by height so it doesn't collide with bottom actions
-*/
-
+/* Bigger, responsive card */
 .fsCard {
   position: absolute;
 
@@ -549,7 +544,8 @@ body {
 
   width: clamp(320px, 60vw, 560px);
 
-  max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
+  /* ✅ slightly tighter because we already reserve bottom space */
+  max-height: calc(100dvh - (260px + var(--safe-top) + var(--safe-bottom)));
   aspect-ratio: 3 / 4;
 
   border-radius: 10px;
@@ -559,9 +555,8 @@ body {
   overflow: hidden;
 
   z-index: 10001;
-  pointer-events: auto; 
+  pointer-events: auto;
 }
-
 
 .fsImg {
   width: 100%;
@@ -600,7 +595,7 @@ body {
   padding: 0;
 }
 
-/* old arrows (kept to avoid breaking if referenced somewhere) */
+/* old arrows (kept) */
 .fsArrowL {
   position: absolute;
   top: 50%;
@@ -627,13 +622,12 @@ body {
   pointer-events: auto;
 }
 
-/* NEW arrows inside card (Android-like pixel brackets) */
+/* NEW arrows inside card */
 .fsArrowIn {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
 
-  /* big invisible tap area (iOS friendly) */
   width: 72px;
   height: 72px;
 
@@ -667,18 +661,35 @@ body {
   right: 6px;
 }
 
-.fsFolderPill {
+/* ✅ NEW: bottom dock that is ALWAYS at the bottom and never overlaps the card */
+.fsBottomDock {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(120px + var(--safe-bottom));
+  left: 0;
+  right: 0;
+  bottom: 0;
 
+  z-index: 10002;
+  pointer-events: auto;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 16px calc(12px + var(--safe-bottom)) 16px;
+}
+
+.fsFolderPill {
   border-radius: 20px;
   background: rgba(0, 0, 0, 0.2);
   padding: 6px 14px;
   cursor: pointer;
+
   z-index: 10002;
   pointer-events: auto;
+
+  background-clip: padding-box;
+  border: none;
 }
 
 .fsFolderText {
@@ -687,12 +698,9 @@ body {
 }
 
 .fsActions {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(76px + var(--safe-bottom));
   display: flex;
   gap: 12px;
+
   z-index: 10002;
   pointer-events: auto;
 }
@@ -740,18 +748,6 @@ body {
   font-size: 14px;
   margin-bottom: 10px;
 }
-
-/* .dialogInput {
-  width: 100%;
-  padding: 10px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.2);
-  color: #ffe7ff;
-  outline: none;
-  font-family: "Pixel", monospace;
-  font-size: 12px;
-} */
 
 .dialogInput {
   width: 100%;
