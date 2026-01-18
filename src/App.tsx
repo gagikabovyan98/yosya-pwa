@@ -226,15 +226,6 @@ import GalleryScreen from "./screens/GalleryScreen";
 
 const DESIGN_H = 800; // фиксируем "высоту дизайна", как было
 
-function isTextInput(el: Element | null) {
-  if (!el) return false;
-  const tag = (el as HTMLElement).tagName?.toLowerCase();
-  if (tag === "input" || tag === "textarea") return true;
-  if (tag === "select") return true;
-  // contenteditable
-  if ((el as HTMLElement).isContentEditable) return true;
-  return false;
-}
 
 function useViewport() {
   const [vp, setVp] = useState(() => {
