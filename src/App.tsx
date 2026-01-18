@@ -218,14 +218,12 @@
 // }
 
 
-
 // src/App.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import IntroScreen from "./screens/IntroScreen";
 import GalleryScreen from "./screens/GalleryScreen";
 
 const DESIGN_H = 800; // фиксируем "высоту дизайна", как было
-
 
 function useViewport() {
   const [vp, setVp] = useState(() => {
@@ -237,23 +235,16 @@ function useViewport() {
   });
 
   const lockRef = useRef(false);
-  const lastRef = useRef(vp);
-
-  useEffect(() => {
-    lastRef.current = vp;
-  }, [vp]);
 
   useEffect(() => {
     const read = () => {
       if (lockRef.current) return;
 
       const vv = window.visualViewport;
-      const next = {
+      setVp({
         w: vv?.width ?? window.innerWidth,
         h: vv?.height ?? window.innerHeight,
-      };
-
-      setVp(next);
+      });
     };
 
     const onFocusIn = (e: Event) => {
@@ -405,7 +396,6 @@ function SnowOverlay() {
 
 export default function App() {
   const { w, h } = useViewport();
-
   const [showIntro, setShowIntro] = useState(true);
 
   const { baseW, scale } = useMemo(() => {
@@ -424,10 +414,8 @@ export default function App() {
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") return;
-      // visible
       setShowIntro(true);
     };
-
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
@@ -440,6 +428,25 @@ export default function App() {
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
+
+  // ✅ ГЛАВНОЕ: когда интро открыто — глушим "scroll жест страницы" на iOS
+  // чтобы свайп не уезжал в прокрутку/резиновый скролл браузера.
+  useEffect(() => {
+    if (!showIntro) return;
+
+    const prevent = (e: TouchEvent) => {
+      // если больше 1 касания (pinch) — не мешаем
+      if (e.touches && e.touches.length > 1) return;
+      e.preventDefault();
+    };
+
+    // важно: passive:false, иначе preventDefault игнорируется
+    document.addEventListener("touchmove", prevent, { passive: false });
+
+    return () => {
+      document.removeEventListener("touchmove", prevent as any);
+    };
+  }, [showIntro]);
 
   return (
     <div className="app">
@@ -463,3 +470,4 @@ export default function App() {
     </div>
   );
 }
+
