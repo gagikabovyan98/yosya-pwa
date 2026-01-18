@@ -518,18 +518,21 @@ body {
 
 .fsImageBoxWrap {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-
-  display: grid;
-  place-items: center;
-
-  /* give room so UI can sit above/below */
-  padding: calc(12px + var(--safe-top)) 18px calc(160px + var(--safe-bottom)) 18px;
-
+  inset: 0;
   z-index: 10001;
+
+  /* больше НЕ используем grid place-items: center; */
+  display: block;
+
+  /* горизонтальные отступы */
+  padding-left: 18px;
+  padding-right: 18px;
+
+  /* не даём карточке упереться в safe areas */
+  padding-top: calc(12px + var(--safe-top));
+  padding-bottom: calc(160px + var(--safe-bottom));
+
+  pointer-events: none; /* чтобы клики не ловил wrap */
 }
 
 /* Bigger, responsive card:
@@ -538,11 +541,16 @@ body {
    - also limited by height so it doesn't collide with bottom actions
 */
 .fsCard {
-  position: relative;
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 
   width: clamp(320px, 60vw, 560px);
-  max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
 
+  /* ограничение по высоте + не "улетает вверх" */
+  max-height: calc(100dvh - (240px + var(--safe-top) + var(--safe-bottom)));
   aspect-ratio: 3 / 4;
 
   border-radius: 10px;
@@ -552,6 +560,7 @@ body {
   overflow: hidden;
 
   z-index: 10001;
+  pointer-events: auto; /* кликается сама карточка */
 }
 
 .fsImg {
