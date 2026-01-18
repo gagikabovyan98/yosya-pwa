@@ -463,7 +463,6 @@
 //     () => undefined
 //   );
 // }
-
 // src/storage/db.ts
 
 export type BackgroundStyle = "PURPLE" | "PINK";
@@ -494,7 +493,7 @@ export type PhotoRecord = {
 };
 
 const DB_NAME = "yosya_db";
-const DB_VERSION = 4; // ✅ bump: added deviceId + safer meta evolution
+const DB_VERSION = 4;
 
 const STORE_PHOTOS = "photos";
 const STORE_META = "meta";
@@ -510,7 +509,6 @@ export function ensureDbReady() {
 }
 
 function openDb(): Promise<IDBDatabase> {
-  // IMPORTANT: reuse single open promise (avoid opening multiple connections)
   if (dbPromise) return dbPromise;
 
   dbPromise = new Promise((resolve, reject) => {
@@ -740,6 +738,7 @@ export async function softDeletePhoto(id: string): Promise<void> {
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
 }
 
+// оставляем функцию, но НЕ используем её автоматически в sync
 export async function hardDeletePhoto(id: string): Promise<void> {
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.delete(id)).then(() => undefined);
 }
@@ -774,12 +773,15 @@ export async function setPhotoFolder(id: string, folder: string | null): Promise
   }
 }
 
+/**
+ * ✅ mark synced WITHOUT touching updatedAt.
+ * updatedAt is part of conflict resolution; changing it on sync causes "wars".
+ */
 export async function markSynced(id: string): Promise<void> {
   const rec = await getPhoto(id);
   if (!rec) return;
 
   rec.syncState = "synced";
-  rec.updatedAt = nowMs();
 
   await withStore(STORE_PHOTOS, "readwrite", (s) => s.put(rec)).then(() => undefined);
 }
@@ -858,25 +860,20 @@ export async function getDeviceId(): Promise<string> {
     const row = await withStore<MetaRow | undefined>(STORE_META, "readonly", (s) => s.get("deviceId"));
     const v = row?.value;
     if (typeof v === "string" && v.trim().length > 0) {
-      // mirror to localStorage (best-effort)
       try {
         localStorage.setItem(LS_DEVICE_ID_KEY, v.trim());
       } catch {}
       return v.trim();
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   // 2) generate new id (always)
   const id = genId();
 
-  // store to localStorage first
   try {
     localStorage.setItem(LS_DEVICE_ID_KEY, id);
   } catch {}
 
-  // store to IndexedDB (best-effort)
   try {
     await withStore(STORE_META, "readwrite", (s) => s.put({ key: "deviceId", value: id })).then(() => undefined);
   } catch {}
@@ -896,9 +893,6 @@ export type ServerMetaItem = {
   originalName: string;
 };
 
-/**
- * Apply server tombstone: if server says deleted => ensure local deleted too.
- */
 export async function applyServerDeleted(id: string): Promise<void> {
   const rec = await getPhoto(id);
   if (!rec) return;
@@ -923,7 +917,10 @@ export async function upsertLocalMetaFromServer(item: ServerMetaItem): Promise<v
   const rec = await getPhoto(item.id);
   if (!rec) return;
 
+  // do not overwrite if local has pending changes
   if (rec.syncState.startsWith("pending_")) return;
+
+  // server wins if newer
   if (typeof item.updatedAt === "number" && item.updatedAt <= rec.updatedAt) return;
 
   rec.folder = item.folder ?? null;

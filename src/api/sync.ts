@@ -170,8 +170,6 @@
 // }
 
 
-
-
 // src/api/sync.ts
 
 import {
@@ -180,7 +178,6 @@ import {
   listPending,
   markSynced,
   setLastSyncAt,
-  hardDeletePhoto,
   applyServerDeleted,
   insertDownloadedPhoto,
   upsertLocalMetaFromServer,
@@ -212,7 +209,7 @@ async function createUploadUrl(deviceId: string, p: PhotoRecord) {
   const body = {
     deviceId,
     id: p.id,
-    contentType: p.blob.type || "image/jpeg",
+    contentType: p.blob?.type || "image/jpeg",
     originalName: p.name || "photo.jpg",
     folder: p.folder,
     favorite: p.isFavorite,
@@ -226,7 +223,11 @@ async function createUploadUrl(deviceId: string, p: PhotoRecord) {
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) throw new Error(`upload-url failed ${res.status}`);
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(`upload-url failed ${res.status} ${JSON.stringify(err)}`);
+  }
+
   const data = await safeJson(res);
   if (!data?.url) throw new Error("upload-url: no url");
   return { url: data.url as string };
@@ -234,8 +235,8 @@ async function createUploadUrl(deviceId: string, p: PhotoRecord) {
 
 /**
  * IMPORTANT:
- * Confirm upload ONLY after PUT succeeded.
- * This prevents "ghost meta" when PUT failed.
+ * - confirm upload to server only AFTER PUT succeeded
+ * - prevents "ghost items" in server meta
  */
 async function confirmUpload(deviceId: string, p: PhotoRecord) {
   const res = await fetch(apiUrl("/api/upload-complete"), {
@@ -252,14 +253,17 @@ async function confirmUpload(deviceId: string, p: PhotoRecord) {
     }),
   });
 
-  if (!res.ok) throw new Error(`upload-complete failed ${res.status}`);
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(`upload-complete failed ${res.status} ${JSON.stringify(err)}`);
+  }
 }
 
 async function uploadBlobToSignedUrl(url: string, blob: Blob) {
   const res = await fetch(url, {
     method: "PUT",
     headers: {
-      "content-type": blob.type || "application/octet-stream",
+      "content-type": blob?.type || "application/octet-stream",
     },
     body: blob,
   });
@@ -280,7 +284,10 @@ async function updateFlags(deviceId: string, p: PhotoRecord) {
     }),
   });
 
-  if (!res.ok) throw new Error(`update failed ${res.status}`);
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(`update failed ${res.status} ${JSON.stringify(err)}`);
+  }
 }
 
 async function deleteRemote(deviceId: string, id: string) {
@@ -290,13 +297,19 @@ async function deleteRemote(deviceId: string, id: string) {
     body: JSON.stringify({ deviceId, id }),
   });
 
-  if (!res.ok) throw new Error(`delete failed ${res.status}`);
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(`delete failed ${res.status} ${JSON.stringify(err)}`);
+  }
 }
 
 async function getSyncList(deviceId: string): Promise<ServerMetaItem[]> {
   const u = apiUrl(`/api/sync?deviceId=${encodeURIComponent(deviceId)}`);
   const res = await fetch(u, { method: "GET" });
-  if (!res.ok) throw new Error(`sync list failed ${res.status}`);
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(`sync list failed ${res.status} ${JSON.stringify(err)}`);
+  }
 
   const data = await safeJson(res);
   const items = Array.isArray(data?.items) ? data.items : [];
@@ -310,7 +323,11 @@ async function getDownloadUrl(deviceId: string, id: string): Promise<string> {
     body: JSON.stringify({ deviceId, id }),
   });
 
-  if (!res.ok) throw new Error(`download-url failed ${res.status}`);
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(`download-url failed ${res.status} ${JSON.stringify(err)}`);
+  }
+
   const data = await safeJson(res);
   if (!data?.url) throw new Error("download-url: no url");
   return data.url as string;
@@ -335,15 +352,11 @@ export async function syncNow(): Promise<{
   syncLock = true;
 
   try {
-    // ✅ ALWAYS have deviceId
     const deviceId = await getDeviceId();
 
-    // =========================
-    // 1) PUSH (local -> server)
-    // =========================
+    // ===== 1) PUSH (local -> server) =====
     const pending = await listPending();
 
-    // stable order: deletes -> uploads -> updates
     const deletes = pending.filter((x) => x.syncState === "pending_delete");
     const uploads = pending.filter((x) => x.syncState === "pending_upload");
     const updates = pending.filter((x) => x.syncState === "pending_update");
@@ -352,33 +365,36 @@ export async function syncNow(): Promise<{
     let uploaded = 0;
     let updated = 0;
 
-    // 1.1) deletes first (tombstones)
+    // 1A) deletes first (tombstones)
     for (const p of deletes) {
       try {
         await deleteRemote(deviceId, p.id);
+
+        // ✅ IMPORTANT: do NOT hard delete locally.
+        // Tombstone must stay to prevent resurrection.
         await markSynced(p.id);
 
-        // optional cleanup: remove tombstone locally AFTER server acknowledged delete
-        await hardDeletePhoto(p.id);
         deleted += 1;
       } catch {
         // keep pending_delete
       }
     }
 
-    // 1.2) uploads
+    // 1B) uploads
     for (const p of uploads) {
       try {
         const fresh = await getPhoto(p.id);
         if (!fresh) continue;
 
-        // if already deleted locally — do not upload; just push delete tombstone
+        // if locally deleted before upload => just send delete tombstone
         if (fresh.deleted) {
           try {
             await deleteRemote(deviceId, fresh.id);
-          } catch {}
-          await markSynced(fresh.id);
-          await hardDeletePhoto(fresh.id);
+            await markSynced(fresh.id);
+            deleted += 1;
+          } catch {
+            // keep pending_delete if server delete failed
+          }
           continue;
         }
 
@@ -390,11 +406,10 @@ export async function syncNow(): Promise<{
         uploaded += 1;
       } catch {
         // keep pending_upload
-        // IMPORTANT: on MinIO full/unavailable — do NOT delete anything locally
       }
     }
 
-    // 1.3) updates
+    // 1C) updates (folder/favorite)
     for (const p of updates) {
       try {
         const fresh = await getPhoto(p.id);
@@ -403,9 +418,11 @@ export async function syncNow(): Promise<{
         if (fresh.deleted) {
           try {
             await deleteRemote(deviceId, fresh.id);
-          } catch {}
-          await markSynced(fresh.id);
-          await hardDeletePhoto(fresh.id);
+            await markSynced(fresh.id);
+            deleted += 1;
+          } catch {
+            // keep pending_delete if server delete failed
+          }
           continue;
         }
 
@@ -417,14 +434,8 @@ export async function syncNow(): Promise<{
       }
     }
 
-    // =========================
-    // 2) PULL (server -> local)
-    // =========================
-    // Goal:
-    // - after cache clear, device can restore all from server+minio
-    // - prevent resurrection: server deleted tombstone wins
+    // ===== 2) PULL (server -> local) =====
     let pulled = 0;
-
     try {
       const items = await getSyncList(deviceId);
 
@@ -435,10 +446,10 @@ export async function syncNow(): Promise<{
           continue;
         }
 
-        // update local meta if exists and no local pending changes
+        // update local metadata if safe
         await upsertLocalMetaFromServer(it);
 
-        // if photo missing locally => download blob and insert
+        // if local photo missing => download and insert
         const local = await getPhoto(it.id);
         if (!local) {
           try {
@@ -447,12 +458,12 @@ export async function syncNow(): Promise<{
             await insertDownloadedPhoto(it, blob);
             pulled += 1;
           } catch {
-            // ignore download failures (minio down/etc)
+            // ignore download failures
           }
         }
       }
     } catch {
-      // ignore pull errors; offline-first stays safe
+      // ignore pull if server/minio down; offline-first stays safe
     }
 
     await setLastSyncAt(Date.now());
