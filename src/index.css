@@ -1,3 +1,4 @@
+
 /* src/index.css */
 
 @font-face {
@@ -8,113 +9,90 @@
   font-display: swap;
 }
 
-/* =========================
-   Safe-area variables
-========================= */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-left: env(safe-area-inset-left);
+  --safe-right: env(safe-area-inset-right);
 }
 
-/* =========================
-   Global baseline
-========================= */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
   background: #060016;
-  font-family: "Pixel", monospace;
-
-  /* Stop iOS page rubber-band */
   overflow: hidden;
+
+  /* IMPORTANT: prevent iOS “rubber-band” scroll on the whole page */
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
 
-  /* Pixel-ish look */
+  /* Make pixel font default everywhere */
+  font-family: "Pixel", monospace;
+
+  /* reduce smoothing (macOS still may smooth a bit) */
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
-
-  /* Disable iOS tap flash */
-  -webkit-tap-highlight-color: transparent;
 }
 
-/* IMPORTANT:
-   Use MIN heights + dvh so iOS PWA won't leave black bars.
-   height:100% sometimes lies on iOS when toolbars appear/disappear.
-*/
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100dvh;
-  background: #060016;
-}
-
-/* Prevent weird selection */
 * {
   box-sizing: border-box;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-/* Allow text selection only where it makes sense */
-input,
-textarea {
-  -webkit-user-select: text;
-  user-select: text;
-}
+/* ===== App full screen wrapper ===== */
 
-/* =========================
-   App fullscreen wrapper
-========================= */
 .app {
   position: fixed;
   inset: 0;
+
   width: 100vw;
-
-  /* ВАЖНО: вместо 100dvh */
-  height: var(--app-height, 100vh);
-
-  overflow: hidden;
-  background: #060016;
+  height: 100dvh;
 
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
 
+  overflow: hidden;
+
+  /* IMPORTANT: prevent overscroll “leaking” outside inner scroll areas */
   overscroll-behavior: none;
+
   touch-action: pan-x pan-y;
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ===== Core layout: FULLSCREEN viewport + transformed 360x800 stage ===== */
 
+/* IMPORTANT:
+   viewport must be fullscreen and NOT center-grid,
+   because App.tsx already computes exact offsets.
+*/
 .viewport {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #060016;
-  overscroll-behavior: none;
 
-  /* тоже не none */
-  touch-action: pan-x pan-y;
+  /* IMPORTANT: prevent global rubber-band */
+  overscroll-behavior: none;
 }
 
-
-/* scaler gets scale from App.tsx */
+/* scaler gets translate+scale from App.tsx */
 .scaler {
   position: absolute;
   left: 0;
   top: 0;
   transform-origin: top left;
-  will-change: transform;
 }
 
-/* fixed stage (screens inside) */
+/* fixed stage (all screens live inside this) */
 .stage {
   width: 100%;
   height: 100%;
@@ -123,7 +101,7 @@ textarea {
 }
 
 /* ========================================================= */
-/* ==================== INTRO ============================== */
+/* ===== Intro styles (Compose-like) ======================= */
 /* ========================================================= */
 
 .introRoot {
@@ -132,11 +110,6 @@ textarea {
   position: relative;
   overflow: hidden;
   background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
-
-  /* IMPORTANT:
-     Disable browser scroll inside intro, allow swipe handlers to work.
-  */
-  touch-action: none;
 }
 
 .introCenter {
@@ -166,19 +139,19 @@ textarea {
   padding: 0 16px;
   color: #f4dfff;
   text-align: center;
+
+  /* Android 26sp ~ 26px at base 360x800 */
   font-size: 26px;
   line-height: 1.25;
   font-weight: 400;
 }
 
-/* Bottom hint */
+/* Bottom hint like Compose */
 .swipeHint {
   position: absolute;
   left: 0;
   right: 0;
-
-  /* IMPORTANT: use safe-bottom so it never collides with home indicator */
-  bottom: calc(28px + var(--safe-bottom));
+  bottom: 28px;
 
   display: flex;
   justify-content: center;
@@ -188,6 +161,11 @@ textarea {
   animation: hintFloat 1800ms cubic-bezier(0.4, 0.0, 0.2, 1) infinite alternate;
 }
 
+/* IMPORTANT:
+   neonArrow uses transform for width,
+   and hintSlide also uses transform.
+   To avoid transform clobbering each other, wrap arrow.
+*/
 .neonArrowWrap {
   display: inline-block;
   transform: translateX(0px) scaleX(1.35);
@@ -196,10 +174,12 @@ textarea {
 
 .neonArrow {
   font-family: "Pixel", monospace;
-  font-size: 44px;
+  font-size: 44px; /* ближе к Android 44sp */
   font-weight: 700;
   color: #ffe7ff;
-  text-shadow: 0 0 6px rgba(255, 77, 225, 0.9), 0 0 14px rgba(255, 77, 225, 0.55);
+
+  text-shadow: 0 0 6px rgba(255, 77, 225, 0.9),
+    0 0 14px rgba(255, 77, 225, 0.55);
 }
 
 @keyframes hintSlide {
@@ -235,7 +215,7 @@ textarea {
 }
 
 /* ========================================================= */
-/* ==================== GALLERY ============================ */
+/* ===== Gallery styles (Android 1:1-ish) ================== */
 /* ========================================================= */
 
 .galleryRoot {
@@ -243,25 +223,26 @@ textarea {
   height: 100%;
   position: relative;
   overflow: hidden;
-
   background: linear-gradient(to bottom, #060016 0%, #130826 45%, #26123d 100%);
 
+  /* IMPORTANT: stop iOS rubber-band on the whole screen */
   overscroll-behavior: none;
-  touch-action: none;
 }
 
 .galleryInner {
   width: 100%;
   height: 100%;
+
+  /* IMPORTANT: switch to flex so grid can take remaining height properly */
   display: flex;
   flex-direction: column;
   min-height: 0;
+
   position: relative;
 
-  /* safe-bottom УБИРАЕМ отсюда, оставляем только top */
-  padding: calc(10px + var(--safe-top)) 16px 64px 16px;
+  /* keep your padding, but make it stable */
+  padding: calc(10px + var(--safe-top)) 16px calc(64px + var(--safe-bottom)) 16px;
 }
-
 
 .headerTitleRow {
   display: flex;
@@ -361,22 +342,16 @@ textarea {
 .grid {
   margin-top: 8px;
 
+  /* IMPORTANT: take remaining height, avoid “empty space” bug */
   flex: 1;
   min-height: 0;
 
   overflow: auto;
+  padding-bottom: 80px;
 
-  /* IMPORTANT:
-     Don't add fake padding here.
-     You already have bottom safe padding in galleryInner.
-     Extra padding makes scroll "feel broken" on iOS.
-  */
-  padding-bottom: 0;
-
+  /* IMPORTANT: keep scroll inside grid only (no page pull-down) */
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-
-  /* IMPORTANT: allow scroll only here */
   touch-action: pan-y;
 }
 
@@ -454,9 +429,7 @@ textarea {
 .fab {
   position: absolute;
   right: 20px;
-
-  /* IMPORTANT: respect safe bottom + bottom bar */
-  bottom: calc(80px + var(--safe-bottom));
+  bottom: 80px;
 
   width: 56px;
   height: 56px;
@@ -478,12 +451,12 @@ textarea {
   right: 0;
   bottom: 0;
   padding: 10px 20px;
-  padding-bottom: calc(10px + var(--safe-bottom));
   display: grid;
   place-items: center;
+
+  /* optional: avoid weird clicks during overscroll */
   overscroll-behavior: none;
 }
-
 
 .bottomBar {
   width: 100%;
@@ -526,7 +499,7 @@ textarea {
 }
 
 /* ========================================================= */
-/* ================= FULLSCREEN OVERLAY ==================== */
+/* ===== Fullscreen (Android overlay 1:1-ish) ============== */
 /* ========================================================= */
 
 .fsBack {
@@ -534,8 +507,8 @@ textarea {
   inset: 0;
   z-index: 9999;
   background: rgba(5, 0, 18, 0.8);
+
   overscroll-behavior: none;
-  touch-action: none;
 }
 
 .fsClickClose {
@@ -557,8 +530,15 @@ textarea {
   padding-top: calc(12px + var(--safe-top));
   padding-bottom: calc(160px + var(--safe-bottom));
 
-  pointer-events: none;
+  pointer-events: none; 
 }
+
+
+/* Bigger, responsive card:
+   - phones: near previous 360px max
+   - tablets: grows up to ~560px
+   - also limited by height so it doesn't collide with bottom actions
+*/
 
 .fsCard {
   position: absolute;
@@ -579,8 +559,9 @@ textarea {
   overflow: hidden;
 
   z-index: 10001;
-  pointer-events: auto;
+  pointer-events: auto; 
 }
+
 
 .fsImg {
   width: 100%;
@@ -589,6 +570,7 @@ textarea {
   display: block;
 }
 
+/* heart + close stay on top corners */
 .fsHeart {
   position: absolute;
   top: calc(12px + var(--safe-top));
@@ -618,16 +600,40 @@ textarea {
   padding: 0;
 }
 
-/* Keep old arrows if referenced */
-.fsArrowL,
-.fsArrowR {
+/* old arrows (kept to avoid breaking if referenced somewhere) */
+.fsArrowL {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
   pointer-events: auto;
 }
 
+.fsArrowR {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 38px;
+  color: #ffe7ff;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10002;
+  pointer-events: auto;
+}
+
+/* NEW arrows inside card (Android-like pixel brackets) */
 .fsArrowIn {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+
+  /* big invisible tap area (iOS friendly) */
   width: 72px;
   height: 72px;
 
@@ -709,23 +715,17 @@ textarea {
   color: #ff6b9a;
 }
 
-/* ========================================================= */
-/* ====================== DIALOGS ========================== */
-/* ========================================================= */
-
+/* simple dialog */
 .dialogBack {
   position: fixed;
   inset: 0;
   z-index: 10000;
   background: rgba(0, 0, 0, 0.55);
-
   display: grid;
   place-items: center;
-
-  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom)) 16px;
+  padding: 16px;
 
   overscroll-behavior: none;
-  touch-action: none;
 }
 
 .dialogCard {
@@ -734,16 +734,24 @@ textarea {
   border-radius: 16px;
   padding: 14px;
   color: #ffe7ff;
-
-  max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - 32px);
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .dialogTitle {
   font-size: 14px;
   margin-bottom: 10px;
 }
+
+/* .dialogInput {
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffe7ff;
+  outline: none;
+  font-family: "Pixel", monospace;
+  font-size: 12px;
+} */
 
 .dialogInput {
   width: 100%;
@@ -757,6 +765,15 @@ textarea {
 
   /* IMPORTANT: iOS zoom/jump fix (must be >= 16px) */
   font-size: 16px;
+}
+
+.dialogBack {
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom)) 16px;
+}
+
+.dialogCard {
+  max-height: calc(100svh - var(--safe-top) - var(--safe-bottom) - 32px);
+  overflow: auto;
 }
 
 .dialogBtns {
