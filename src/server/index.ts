@@ -202,7 +202,6 @@
 // app.listen({ port: PORT, host: "0.0.0.0" });
 
 
-
 // src/server/index.ts
 
 import Fastify from "fastify";
@@ -218,12 +217,17 @@ const app = Fastify({ logger: true });
 
 await app.register(cors, {
   origin: (origin, cb) => {
+    // allow server-to-server / curl (no Origin)
     if (!origin) return cb(null, true);
 
     const allowed = new Set([
       "http://localhost:5173",
       "http://127.0.0.1:5173",
-      // "https://yourdomain.com",
+
+      // ✅ твой сервер / домен
+      "http://62.169.27.185",
+      "https://yosya.store",
+      "http://yosya.store",
     ]);
 
     cb(null, allowed.has(origin));
@@ -241,6 +245,11 @@ const S3_SECRET_KEY = process.env.S3_SECRET_KEY || "supersecretpassword";
 const S3_BUCKET = process.env.S3_BUCKET || "yosya";
 const PUBLIC_BASE = process.env.PUBLIC_BASE || "photos";
 
+/**
+ * IMPORTANT:
+ * Presigned URL MUST be signed with the SAME endpoint host that will be used by the client.
+ * So we sign with S3_ENDPOINT_PUBLIC.
+ */
 const s3Signer = new S3Client({
   region: S3_REGION,
   endpoint: S3_ENDPOINT_PUBLIC,
@@ -356,15 +365,15 @@ app.post("/api/upload-complete", async (req, reply) => {
     .parse(req.body);
 
   const meta = loadMeta(body.deviceId);
-
   const existing = meta[body.id];
+
   const updatedAt = typeof body.updatedAt === "number" ? body.updatedAt : Date.now();
 
   meta[body.id] = {
     id: body.id,
     key: objKey(body.deviceId, body.id),
     createdAt: typeof body.createdAt === "number" ? body.createdAt : Date.now(),
-    updatedAt: updatedAt,
+    updatedAt,
     folder: body.folder,
     favorite: body.favorite,
     deleted: false,
@@ -400,7 +409,6 @@ app.post("/api/download-url", async (req, reply) => {
 /**
  * 3) soft delete (tombstone)
  * IMPORTANT: we do NOT delete object from MinIO by default (safer).
- * If you want true delete later, we can add a feature flag.
  */
 app.post("/api/delete", async (req, reply) => {
   const body = z.object({ deviceId: z.string().min(1), id: z.string().min(1) }).parse(req.body);
@@ -408,7 +416,7 @@ app.post("/api/delete", async (req, reply) => {
   const meta = loadMeta(body.deviceId);
   const rec = meta[body.id];
 
-  // if no record exists yet -> we still store tombstone to prevent "resurrection"
+  // if no record exists yet -> still store tombstone to prevent resurrection
   if (!rec) {
     meta[body.id] = {
       id: body.id,
@@ -449,7 +457,6 @@ app.post("/api/update", async (req, reply) => {
   const rec = meta[body.id];
   if (!rec || rec.deleted) return reply.code(404).send({ error: "not found" });
 
-  // server wins only if update is >= current
   const incomingUpdatedAt = typeof body.updatedAt === "number" ? body.updatedAt : Date.now();
   if (incomingUpdatedAt < rec.updatedAt) return reply.send({ ok: true });
 

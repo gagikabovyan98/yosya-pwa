@@ -171,6 +171,7 @@
 
 
 
+
 // src/api/sync.ts
 
 import {
@@ -233,8 +234,8 @@ async function createUploadUrl(deviceId: string, p: PhotoRecord) {
 
 /**
  * IMPORTANT:
- * - We confirm upload to server after PUT succeeded.
- * - This avoids "ghost items" if upload-url was generated but upload failed.
+ * Confirm upload ONLY after PUT succeeded.
+ * This prevents "ghost meta" when PUT failed.
  */
 async function confirmUpload(deviceId: string, p: PhotoRecord) {
   const res = await fetch(apiUrl("/api/upload-complete"), {
@@ -323,16 +324,26 @@ async function fetchBlob(url: string): Promise<Blob> {
 
 let syncLock = false;
 
-export async function syncNow(): Promise<{ ok: boolean; uploaded: number; updated: number; deleted: number; pulled: number }> {
+export async function syncNow(): Promise<{
+  ok: boolean;
+  uploaded: number;
+  updated: number;
+  deleted: number;
+  pulled: number;
+}> {
   if (syncLock) return { ok: true, uploaded: 0, updated: 0, deleted: 0, pulled: 0 };
   syncLock = true;
 
   try {
+    // ✅ ALWAYS have deviceId
     const deviceId = await getDeviceId();
 
-    // ===== 1) PUSH (local -> server) =====
+    // =========================
+    // 1) PUSH (local -> server)
+    // =========================
     const pending = await listPending();
 
+    // stable order: deletes -> uploads -> updates
     const deletes = pending.filter((x) => x.syncState === "pending_delete");
     const uploads = pending.filter((x) => x.syncState === "pending_upload");
     const updates = pending.filter((x) => x.syncState === "pending_update");
@@ -341,7 +352,7 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
     let uploaded = 0;
     let updated = 0;
 
-    // deletes first (tombstones)
+    // 1.1) deletes first (tombstones)
     for (const p of deletes) {
       try {
         await deleteRemote(deviceId, p.id);
@@ -355,13 +366,13 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
       }
     }
 
-    // uploads
+    // 1.2) uploads
     for (const p of uploads) {
       try {
         const fresh = await getPhoto(p.id);
         if (!fresh) continue;
 
-        // if already deleted locally — upload not needed, cleanup
+        // if already deleted locally — do not upload; just push delete tombstone
         if (fresh.deleted) {
           try {
             await deleteRemote(deviceId, fresh.id);
@@ -371,24 +382,19 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
           continue;
         }
 
-        // create signed PUT url
         const { url } = await createUploadUrl(deviceId, fresh);
-
-        // upload to MinIO/S3
         await uploadBlobToSignedUrl(url, fresh.blob);
-
-        // confirm to server (so meta exists only if upload succeeded)
         await confirmUpload(deviceId, fresh);
 
         await markSynced(fresh.id);
         uploaded += 1;
       } catch {
         // keep pending_upload
-        // IMPORTANT for "MinIO full": do NOT delete anything locally
+        // IMPORTANT: on MinIO full/unavailable — do NOT delete anything locally
       }
     }
 
-    // updates
+    // 1.3) updates
     for (const p of updates) {
       try {
         const fresh = await getPhoto(p.id);
@@ -411,23 +417,28 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
       }
     }
 
-    // ===== 2) PULL (server -> local) =====
-    // This part is what gives you "after cache cleared iPhone can restore everything"
+    // =========================
+    // 2) PULL (server -> local)
+    // =========================
+    // Goal:
+    // - after cache clear, device can restore all from server+minio
+    // - prevent resurrection: server deleted tombstone wins
     let pulled = 0;
+
     try {
       const items = await getSyncList(deviceId);
 
       for (const it of items) {
-        // server tombstone wins (prevents "deleted offline came back")
+        // server tombstone wins
         if (it.deleted) {
           await applyServerDeleted(it.id);
           continue;
         }
 
-        // try update local metadata (if already exists, and no pending local changes)
+        // update local meta if exists and no local pending changes
         await upsertLocalMetaFromServer(it);
 
-        // if local photo doesn't exist => download and insert
+        // if photo missing locally => download blob and insert
         const local = await getPhoto(it.id);
         if (!local) {
           try {
@@ -436,12 +447,12 @@ export async function syncNow(): Promise<{ ok: boolean; uploaded: number; update
             await insertDownloadedPhoto(it, blob);
             pulled += 1;
           } catch {
-            // ignore download failures (minio unavailable, etc.)
+            // ignore download failures (minio down/etc)
           }
         }
       }
     } catch {
-      // ignore pull if server/minio down; offline-first stays safe
+      // ignore pull errors; offline-first stays safe
     }
 
     await setLastSyncAt(Date.now());
