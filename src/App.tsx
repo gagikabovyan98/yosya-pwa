@@ -236,41 +236,52 @@ function isTextInput(el: Element | null) {
   return false;
 }
 
-function useViewportStableForKeyboard() {
-  const [vp, setVp] = useState(() => ({
-    w: window.innerWidth,
-    h: window.innerHeight,
-  }));
+function useViewport() {
+  const [vp, setVp] = useState(() => {
+    const vv = window.visualViewport;
+    return {
+      w: vv?.width ?? window.innerWidth,
+      h: vv?.height ?? window.innerHeight,
+    };
+  });
 
-  const freezeRef = useRef(false);
+  const lockRef = useRef(false);
+  const lastRef = useRef(vp);
+
+  useEffect(() => {
+    lastRef.current = vp;
+  }, [vp]);
 
   useEffect(() => {
     const read = () => {
-      // когда фокус в инпуте — НЕ используем visualViewport (иначе iOS прыгает)
-      const useVV = !freezeRef.current;
-      const vv = window.visualViewport;
+      if (lockRef.current) return;
 
-      setVp({
-        w: useVV ? vv?.width ?? window.innerWidth : window.innerWidth,
-        h: useVV ? vv?.height ?? window.innerHeight : window.innerHeight,
-      });
+      const vv = window.visualViewport;
+      const next = {
+        w: vv?.width ?? window.innerWidth,
+        h: vv?.height ?? window.innerHeight,
+      };
+
+      setVp(next);
     };
 
-    const onFocusIn = (e: FocusEvent) => {
-      const target = e.target as Element | null;
-      if (isTextInput(target)) {
-        freezeRef.current = true;
-        // сразу фиксируем размеры на inner*, чтобы не прыгнуло
-        setVp({ w: window.innerWidth, h: window.innerHeight });
+    const onFocusIn = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        lockRef.current = true; // freeze layout while keyboard is open
       }
     };
 
     const onFocusOut = () => {
-      // отпускаем “заморозку” чуть позже (iOS иногда дергает blur/resize)
-      window.setTimeout(() => {
-        freezeRef.current = false;
-        read();
-      }, 80);
+      lockRef.current = false;
+      // refresh once after keyboard closes
+      const vv = window.visualViewport;
+      setVp({
+        w: vv?.width ?? window.innerWidth,
+        h: vv?.height ?? window.innerHeight,
+      });
     };
 
     const vv = window.visualViewport;
@@ -282,9 +293,6 @@ function useViewportStableForKeyboard() {
 
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
-
-    // первичное чтение
-    read();
 
     return () => {
       vv?.removeEventListener("resize", read);
@@ -405,7 +413,7 @@ function SnowOverlay() {
 }
 
 export default function App() {
-  const { w, h } = useViewportStableForKeyboard();
+  const { w, h } = useViewport();
 
   const [showIntro, setShowIntro] = useState(true);
 
