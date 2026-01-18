@@ -13,6 +13,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left);
   --safe-right: env(safe-area-inset-right);
+
+  /* ✅ нижняя панель fullscreen (папка + кнопки) */
+  --fs-dock-h: 112px;
 }
 
 html,
@@ -63,8 +66,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ===== Core layout ===== */
-
 .viewport {
   position: absolute;
   inset: 0;
@@ -87,7 +88,7 @@ body {
 }
 
 /* ========================================================= */
-/* ===== Intro styles ====================================== */
+/* ===== Intro styles (Compose-like) ======================= */
 /* ========================================================= */
 
 .introRoot {
@@ -469,7 +470,7 @@ body {
 }
 
 /* ========================================================= */
-/* ===== Fullscreen (Android overlay 1:1-ish) ============== */
+/* ===== Fullscreen overlay ================================= */
 /* ========================================================= */
 
 .fsBack {
@@ -480,40 +481,43 @@ body {
   overscroll-behavior: none;
 }
 
+/* ✅ клик по фону */
 .fsClickClose {
   position: absolute;
   inset: 0;
   z-index: 10000;
 }
 
-/* ✅ we reserve bottom space for dock so buttons never overlap */
+/* ✅ зона контента (картинка/карта) всегда имеет место под нижний док */
 .fsImageBoxWrap {
   position: absolute;
   inset: 0;
   z-index: 10001;
 
-  display: block;
-
   padding-left: 18px;
   padding-right: 18px;
-
   padding-top: calc(12px + var(--safe-top));
-  padding-bottom: calc(190px + var(--safe-bottom));
+
+  /* ✅ НЕ угадываем число руками — используем dock */
+  padding-bottom: calc(var(--fs-dock-h) + var(--safe-bottom) + 14px);
 
   pointer-events: none;
 }
 
-/* keep responsive card */
+/* карта как была, но ограничиваем по высоте чтобы не лезла в док */
 .fsCard {
   position: absolute;
-
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
 
   width: clamp(320px, 60vw, 560px);
 
-  max-height: calc(100dvh - (260px + var(--safe-top) + var(--safe-bottom)));
+  /* ✅ ключевое: не пересекается с доком */
+  max-height: calc(
+    100dvh - var(--fs-dock-h) - var(--safe-bottom) - var(--safe-top) - 40px
+  );
+
   aspect-ratio: 3 / 4;
 
   border-radius: 10px;
@@ -526,21 +530,14 @@ body {
   pointer-events: auto;
 }
 
-/* ✅ IMPORTANT: do NOT crop image anymore */
+/* ❗️картинку НЕ трогаем как ты просил (оставляем cover) */
 .fsImg {
   width: 100%;
   height: 100%;
-
-  object-fit: contain; /* <-- was cover, that cropped */
-  object-position: center;
-
+  object-fit: cover;
   display: block;
-
-  /* so letterboxing looks intentional */
-  background: rgba(255, 255, 255, 0.06);
 }
 
-/* heart + close */
 .fsHeart {
   position: absolute;
   top: calc(12px + var(--safe-top));
@@ -570,34 +567,6 @@ body {
   padding: 0;
 }
 
-/* old arrows */
-.fsArrowL {
-  position: absolute;
-  top: 50%;
-  left: 12px;
-  transform: translateY(-50%);
-  font-size: 38px;
-  color: #ffe7ff;
-  cursor: pointer;
-  user-select: none;
-  z-index: 10002;
-  pointer-events: auto;
-}
-
-.fsArrowR {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  font-size: 38px;
-  color: #ffe7ff;
-  cursor: pointer;
-  user-select: none;
-  z-index: 10002;
-  pointer-events: auto;
-}
-
-/* arrows inside card */
 .fsArrowIn {
   position: absolute;
   top: 50%;
@@ -636,14 +605,15 @@ body {
   right: 6px;
 }
 
-/* bottom dock */
+/* ✅ НОВОЕ: фиксированный нижний док — всегда снизу и НЕ на картинке */
 .fsBottomDock {
-  position: absolute;
+  position: fixed;
   left: 0;
   right: 0;
+
   bottom: 0;
 
-  z-index: 10002;
+  z-index: 10003;
   pointer-events: auto;
 
   display: flex;
@@ -651,7 +621,17 @@ body {
   align-items: center;
   gap: 10px;
 
+  /* ✅ высота дока = переменная, чтобы контент сверху её учитывал */
+  min-height: calc(var(--fs-dock-h) + var(--safe-bottom));
   padding: 10px 16px calc(12px + var(--safe-bottom)) 16px;
+
+  /* слегка отделяем док от фона */
+  background: linear-gradient(
+    to top,
+    rgba(5, 0, 18, 0.92),
+    rgba(5, 0, 18, 0.55) 70%,
+    rgba(5, 0, 18, 0)
+  );
 }
 
 .fsFolderPill {
@@ -659,11 +639,6 @@ body {
   background: rgba(0, 0, 0, 0.2);
   padding: 6px 14px;
   cursor: pointer;
-
-  z-index: 10002;
-  pointer-events: auto;
-
-  background-clip: padding-box;
   border: none;
 }
 
@@ -675,9 +650,6 @@ body {
 .fsActions {
   display: flex;
   gap: 12px;
-
-  z-index: 10002;
-  pointer-events: auto;
 }
 
 .fsBtn {
@@ -707,7 +679,6 @@ body {
   display: grid;
   place-items: center;
   padding: 16px;
-
   overscroll-behavior: none;
 }
 

@@ -207,6 +207,7 @@
 //   );
 // }
 
+
 // src/ui/FullscreenOverlay.tsx
 
 import { useEffect, useRef, useState } from "react";
@@ -284,7 +285,9 @@ export default function FullscreenOverlay(props: {
     >
       <div className="fsImageBoxWrap" onClick={(e) => e.stopPropagation()}>
         <div className="fsCard" onClick={(e) => e.stopPropagation()}>
-          {curUrl ? <img className="fsImg" src={curUrl} alt={cur.name} draggable={false} /> : null}
+          {curUrl ? (
+            <img className="fsImg" src={curUrl} alt={cur.name} draggable={false} />
+          ) : null}
 
           <button
             type="button"
@@ -341,6 +344,7 @@ export default function FullscreenOverlay(props: {
         ✕
       </button>
 
+      {/* ✅ ВАЖНО: док всегда снизу экрана, вне картинки */}
       <div className="fsBottomDock" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
@@ -376,6 +380,7 @@ export default function FullscreenOverlay(props: {
         </div>
       </div>
 
+      {/* клик по фону — закрыть */}
       <div className="fsClickClose" onClick={onClose} />
 
       {showFolderDialog ? (
